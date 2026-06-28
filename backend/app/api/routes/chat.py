@@ -15,6 +15,7 @@ from app.schemas.chat import (
     MessageItem,
 )
 from app.services.akon_engine import generate_akon_reply
+from app.services.audit_service import create_audit_log
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
 from app.services.safety_service import classify_safety
@@ -29,6 +30,19 @@ def _create_conversation_title(message: str) -> str:
         return cleaned
 
     return f"{cleaned[:57]}..."
+
+
+def _audit_risk_from_safety_level(safety_level: str) -> str:
+    if safety_level == "S4":
+        return "critical"
+
+    if safety_level == "S3":
+        return "high"
+
+    if safety_level in {"S1", "S2"}:
+        return "medium"
+
+    return "low"
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -100,6 +114,25 @@ def send_chat_message(
 
     db.add(user_message)
     db.add(assistant_message)
+    db.flush()
+
+    create_audit_log(
+        db,
+        action="chat.message.created",
+        entity_type="conversation",
+        entity_id=conversation.id,
+        risk_level=_audit_risk_from_safety_level(safety_result["level"]),
+        source="chat_route",
+        details={
+            "safety_level": safety_result["level"],
+            "detected_emotion": safety_result.get("detected_emotion"),
+            "memory_candidate_count": len(memory_candidates),
+            "user_message_id": user_message.id,
+            "assistant_message_id": assistant_message.id,
+            "message_length": len(payload.message),
+        },
+    )
+
     db.commit()
     db.refresh(conversation)
 

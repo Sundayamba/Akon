@@ -7,7 +7,7 @@ os.environ["DATABASE_URL"] = "sqlite:///./akon_test.db"
 os.environ["DEFAULT_AI_PROVIDER"] = "mock"
 
 from app.db.database import Base, engine
-from app.models import Conversation, MemoryItem, Message  # noqa: F401
+from app.models import AuditLog, Conversation, MemoryItem, Message  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

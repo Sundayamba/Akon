@@ -4,10 +4,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes.audit import router as audit_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.memory import router as memory_router
 from app.db.database import Base, engine
-from app.models import Conversation, MemoryItem, Message  # noqa: F401
+from app.models import AuditLog, Conversation, MemoryItem, Message  # noqa: F401
 
 
 @asynccontextmanager
@@ -19,7 +20,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title="Akon API",
     description="Supportive-core backend for Akon AI companion.",
-    version="0.1.5",
+    version="0.1.7",
     lifespan=lifespan,
 )
 
@@ -40,6 +41,7 @@ app.add_middleware(
 
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
 app.include_router(memory_router, prefix="/memory", tags=["memory"])
+app.include_router(audit_router, prefix="/audit", tags=["audit"])
 
 
 @app.get("/health")
