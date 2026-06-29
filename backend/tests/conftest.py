@@ -5,9 +5,10 @@ import pytest
 
 os.environ["DATABASE_URL"] = "sqlite:///./akon_test.db"
 os.environ["DEFAULT_AI_PROVIDER"] = "mock"
+os.environ["SECRET_KEY"] = "test-secret-key-with-at-least-32-bytes-long"
 
 from app.db.database import Base, engine
-from app.models import AuditLog, Conversation, MemoryItem, Message  # noqa: F401
+from app.models import AuditLog, Conversation, MemoryItem, Message, User  # noqa: F401
 
 
 @pytest.fixture(autouse=True)

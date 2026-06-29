@@ -10,14 +10,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 
 from app.api.routes.audit import router as audit_router
+from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.memory import router as memory_router
 from app.core.config import settings
 from app.db.database import Base, engine
-from app.models import AuditLog, Conversation, MemoryItem, Message  # noqa: F401
+from app.models import AuditLog, Conversation, MemoryItem, Message, User  # noqa: F401
 
 
-API_VERSION = "0.1.8"
+API_VERSION = "0.1.9"
 
 
 @asynccontextmanager
@@ -133,6 +134,7 @@ async def unhandled_exception_handler(
     )
 
 
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(chat_router, prefix="/chat", tags=["chat"])
 app.include_router(memory_router, prefix="/memory", tags=["memory"])
 app.include_router(audit_router, prefix="/audit", tags=["audit"])

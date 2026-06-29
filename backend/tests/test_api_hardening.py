@@ -15,7 +15,7 @@ def test_root_returns_api_metadata() -> None:
 
     assert data["service"] == "akon-api"
     assert data["name"] == "Akon"
-    assert data["version"] == "0.1.8"
+    assert data["version"] == "0.1.9"
     assert data["environment"] == "development"
     assert data["status"] == "ok"
 
@@ -28,7 +28,7 @@ def test_version_returns_version_metadata() -> None:
     data = response.json()
 
     assert data["service"] == "akon-api"
-    assert data["version"] == "0.1.8"
+    assert data["version"] == "0.1.9"
     assert data["environment"] == "development"
 
 

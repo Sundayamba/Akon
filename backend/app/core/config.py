@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     app_name: str = "Akon"
     app_env: str = "development"
 
+    secret_key: str = "change-this-dev-secret-before-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24
+
     default_ai_provider: str = "mock"
 
     openai_api_key: str | None = None
