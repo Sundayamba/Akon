@@ -1,0 +1,94 @@
+export type AuthUser = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type TokenResponse = {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: AuthUser;
+};
+
+export type ApiErrorResponse = {
+  error?: {
+    code?: string;
+    message?: string;
+    status_code?: number;
+    request_id?: string;
+    details?: unknown;
+  };
+};
+
+export type MemoryItem = {
+  id: string;
+  memory_type: string;
+  content: string;
+  source: string | null;
+  confidence: string;
+  sensitivity: string;
+  consent_state: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MemoryCandidateItem = {
+  memory_type: string;
+  content: string;
+  source: string;
+  confidence: string;
+  sensitivity: string;
+  consent_required: boolean;
+  reason: string;
+};
+
+export type ChatResponse = {
+  reply: string;
+  safety_level: string;
+  detected_emotion: string | null;
+  conversation_id: string;
+  memory_candidates: MemoryCandidateItem[];
+};
+
+export type ConversationSummary = {
+  id: string;
+  title: string | null;
+  channel: string;
+  safety_level: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MessageItem = {
+  id: string;
+  role: string;
+  content: string;
+  safety_level: string | null;
+  detected_emotion: string | null;
+  created_at: string;
+};
+
+export type ConversationDetail = {
+  id: string;
+  title: string | null;
+  channel: string;
+  safety_level: string | null;
+  created_at: string;
+  updated_at: string;
+  messages: MessageItem[];
+};
+
+export type AuditLog = {
+  id: string;
+  actor_user_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  risk_level: string;
+  source: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+};
