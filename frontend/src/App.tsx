@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import "./App.css";
 import {
   AUTH_EXPIRED_EVENT,
@@ -36,6 +36,7 @@ type AuthMode = "login" | "register";
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
   safetyLevel?: string | null;
 };
 
@@ -75,12 +76,46 @@ function formatErrorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
+function isSameDay(firstDate: Date, secondDate: Date): boolean {
+  return (
+    firstDate.getFullYear() === secondDate.getFullYear() &&
+    firstDate.getMonth() === secondDate.getMonth() &&
+    firstDate.getDate() === secondDate.getDate()
+  );
+}
+
+function formatMessageTimestamp(createdAt: string): string {
+  const messageDate = new Date(createdAt);
+
+  if (Number.isNaN(messageDate.getTime())) {
+    return "Just now";
+  }
+
+  const now = new Date();
+
+  if (isSameDay(messageDate, now)) {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(messageDate);
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    year: messageDate.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  }).format(messageDate);
+}
+
 function mapConversationToMessages(
   conversation: ConversationDetail,
 ): ChatMessage[] {
   return conversation.messages.map((message) => ({
     role: message.role === "assistant" ? "assistant" : "user",
     content: message.content,
+    createdAt: message.created_at,
     safetyLevel: message.safety_level,
   }));
 }
@@ -104,6 +139,9 @@ function buildMemoryEditState(memory: MemoryItem): MemoryEditState {
 }
 
 function App() {
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const conversationOpenRequestRef = useRef(0);
+
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
@@ -133,6 +171,9 @@ function App() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isMemoryLoading, setIsMemoryLoading] = useState(false);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
+  const [openingConversationId, setOpeningConversationId] = useState<string | null>(
+    null,
+  );
   const [candidateActionIndex, setCandidateActionIndex] = useState<number | null>(null);
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -155,6 +196,12 @@ function App() {
     return currentUser.display_name || currentUser.email;
   }, [currentUser]);
 
+  function cancelPendingConversationOpen() {
+    conversationOpenRequestRef.current += 1;
+    setOpeningConversationId(null);
+    setIsWorkspaceLoading(false);
+  }
+
   useEffect(() => {
     function handleAuthExpired() {
       resetAuthenticatedState();
@@ -167,6 +214,23 @@ function App() {
       window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     };
   }, []);
+
+  useEffect(() => {
+    const messageList = messageListRef.current;
+
+    if (!messageList) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      messageList.scrollTo({
+        top: messageList.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [messages, isChatLoading]);
 
   useEffect(() => {
     async function restoreSession() {
@@ -226,11 +290,22 @@ function App() {
     conversationId: string,
     shouldSetStatus = true,
   ) {
+    const requestId = conversationOpenRequestRef.current + 1;
+    conversationOpenRequestRef.current = requestId;
+
     setIsWorkspaceLoading(true);
+    setOpeningConversationId(conversationId);
+    setActiveConversationId(conversationId);
+    setMessages([]);
+    setMemoryCandidates([]);
     resetFeedback();
 
     try {
       const conversation = await getConversation(authToken, conversationId);
+
+      if (conversationOpenRequestRef.current !== requestId) {
+        return;
+      }
 
       setActiveConversationId(conversation.id);
       storeActiveConversationId(conversation.id);
@@ -241,11 +316,18 @@ function App() {
         setStatusMessage("Conversation reopened.");
       }
     } catch (error) {
+      if (conversationOpenRequestRef.current !== requestId) {
+        return;
+      }
+
       clearActiveConversationId();
       setActiveConversationId(undefined);
       setErrorMessage(formatErrorMessage(error));
     } finally {
-      setIsWorkspaceLoading(false);
+      if (conversationOpenRequestRef.current === requestId) {
+        setOpeningConversationId(null);
+        setIsWorkspaceLoading(false);
+      }
     }
   }
 
@@ -255,6 +337,7 @@ function App() {
   }
 
   function resetAuthenticatedState() {
+    cancelPendingConversationOpen();
     clearStoredAccessToken();
     clearActiveConversationId();
     setToken(null);
@@ -266,6 +349,7 @@ function App() {
     setConversations([]);
     setAuditLogs([]);
     setActiveConversationId(undefined);
+    setOpeningConversationId(null);
   }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -292,6 +376,7 @@ function App() {
       setToken(login.access_token);
       setCurrentUser(login.user);
       setActiveConversationId(undefined);
+      cancelPendingConversationOpen();
       setMessages([]);
       setMemoryCandidates([]);
       setMemoryEditState(null);
@@ -312,6 +397,7 @@ function App() {
   }
 
   function handleNewConversation() {
+    cancelPendingConversationOpen();
     clearActiveConversationId();
     setActiveConversationId(undefined);
     setMessages([]);
@@ -334,13 +420,14 @@ function App() {
 
     const trimmedMessage = chatInput.trim();
 
-    if (!token || !trimmedMessage) {
+    if (!token || !trimmedMessage || isChatLoading) {
       return;
     }
 
     const userMessage: ChatMessage = {
       role: "user",
       content: trimmedMessage,
+      createdAt: new Date().toISOString(),
     };
 
     setMessages((current) => [...current, userMessage]);
@@ -363,6 +450,7 @@ function App() {
         {
           role: "assistant",
           content: response.reply,
+          createdAt: new Date().toISOString(),
           safetyLevel: response.safety_level,
         },
       ]);
@@ -373,6 +461,20 @@ function App() {
     } finally {
       setIsChatLoading(false);
     }
+  }
+
+  function handleChatInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (isChatLoading || !chatInput.trim()) {
+      return;
+    }
+
+    event.currentTarget.form?.requestSubmit();
   }
 
   async function handleCreateMemory(event: FormEvent<HTMLFormElement>) {
@@ -546,7 +648,7 @@ function App() {
 
       <section className="hero-panel">
         <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.2.8</p>
+          <p className="eyebrow">Akon companion preview · v0.2.9</p>
           <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
             Akon is being shaped as a supportive AI companion that remembers with
@@ -577,7 +679,7 @@ function App() {
         <section className="feedback-row">
           {errorMessage && <div className="alert error">{errorMessage}</div>}
           {statusMessage && <div className="alert success">{statusMessage}</div>}
-          {isBusy && <div className="alert loading">Akon is working...</div>}
+          {isBusy && <div className="alert loading">Akon is gently updating things...</div>}
         </section>
       )}
 
@@ -675,12 +777,18 @@ function App() {
               </div>
             </div>
 
-            <div className="message-list">
-              {messages.length === 0 ? (
+            <div className="message-list" ref={messageListRef}>
+              {openingConversationId ? (
+                <div className="empty-conversation loading-conversation">
+                  <div className="pulse-dot" />
+                  <p>Bringing this conversation back into view...</p>
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="empty-conversation">
                   <div className="pulse-dot" />
                   <p>
-                    Start with what is on your mind. You do not need to explain it perfectly.
+                    Start anywhere. Akon can sit with the messy first version and help
+                    you find the next clear step.
                   </p>
                 </div>
               ) : (
@@ -688,7 +796,14 @@ function App() {
                   <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
                     <strong>{message.role === "user" ? "You" : "Akon"}</strong>
                     <p>{message.content}</p>
-                    {message.safetyLevel && <small>Care level: {message.safetyLevel}</small>}
+                    <div className="message-meta">
+                      <time dateTime={message.createdAt}>
+                        {formatMessageTimestamp(message.createdAt)}
+                      </time>
+                      {message.safetyLevel && (
+                        <span>Care level: {message.safetyLevel}</span>
+                      )}
+                    </div>
                   </article>
                 ))
               )}
@@ -706,6 +821,7 @@ function App() {
                 value={chatInput}
                 placeholder="Tell Akon what is going on..."
                 onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={handleChatInputKeyDown}
               />
               <button disabled={isChatLoading || !chatInput.trim()} type="submit">
                 {isChatLoading ? "Sending..." : "Send"}
@@ -998,10 +1114,16 @@ function App() {
                       }
                       key={conversation.id}
                       type="button"
+                      aria-current={
+                        conversation.id === activeConversationId ? "true" : undefined
+                      }
                       onClick={() => void handleConversationClick(conversation.id)}
                     >
                       <strong>{conversation.title || "Untitled conversation"}</strong>
-                      <small>{conversation.safety_level || "No care level"}</small>
+                      <small>
+                        {conversation.id === activeConversationId ? "Open now - " : ""}
+                        {conversation.safety_level || "No care level"}
+                      </small>
                     </button>
                   ))
                 )}
