@@ -2,8 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import "./App.css";
 import {
+  AUTH_EXPIRED_EVENT,
+  ApiRequestError,
   clearStoredAccessToken,
   createMemory,
+  getConversation,
   getCurrentUser,
   getStoredAccessToken,
   listAuditLogs,
@@ -18,6 +21,7 @@ import type {
   AuditLog,
   AuthUser,
   ChatResponse,
+  ConversationDetail,
   ConversationSummary,
   MemoryCandidateItem,
   MemoryItem,
@@ -28,8 +32,45 @@ type AuthMode = "login" | "register";
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
-  safetyLevel?: string;
+  safetyLevel?: string | null;
 };
+
+const ACTIVE_CONVERSATION_KEY = "akon_active_conversation_id";
+
+function getStoredActiveConversationId(): string | undefined {
+  return localStorage.getItem(ACTIVE_CONVERSATION_KEY) || undefined;
+}
+
+function storeActiveConversationId(conversationId: string): void {
+  localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversationId);
+}
+
+function clearActiveConversationId(): void {
+  localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+}
+
+function formatErrorMessage(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    const requestIdText = error.requestId ? ` Request ID: ${error.requestId}` : "";
+    return `${error.message}${requestIdText}`;
+  }
+
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Something went wrong.";
+}
+
+function mapConversationToMessages(
+  conversation: ConversationDetail,
+): ChatMessage[] {
+  return conversation.messages.map((message) => ({
+    role: message.role === "assistant" ? "assistant" : "user",
+    content: message.content,
+    safetyLevel: message.safety_level,
+  }));
+}
 
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
@@ -41,7 +82,9 @@ function App() {
   const [displayName, setDisplayName] = useState("Rex");
 
   const [chatInput, setChatInput] = useState("");
-  const [activeConversationId, setActiveConversationId] = useState<string | undefined>();
+  const [activeConversationId, setActiveConversationId] = useState<string | undefined>(
+    () => getStoredActiveConversationId(),
+  );
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidateItem[]>([]);
 
@@ -51,11 +94,18 @@ function App() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isMemoryLoading, setIsMemoryLoading] = useState(false);
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
+
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isAuthenticated = Boolean(token && currentUser);
+  const isBusy =
+    isAuthLoading || isChatLoading || isMemoryLoading || isWorkspaceLoading;
 
   const userLabel = useMemo(() => {
     if (!currentUser) {
@@ -66,39 +116,97 @@ function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    function handleAuthExpired() {
+      resetAuthenticatedState();
+      setErrorMessage("Your session expired. Please login again.");
+    }
+
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+
+    return () => {
+      window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    };
+  }, []);
+
+  useEffect(() => {
     async function restoreSession() {
-      if (!token) {
+      const storedToken = getStoredAccessToken();
+
+      if (!storedToken) {
+        setIsBootstrapping(false);
         return;
       }
 
       try {
-        const user = await getCurrentUser(token);
+        const user = await getCurrentUser(storedToken);
+        setToken(storedToken);
         setCurrentUser(user);
-        await refreshWorkspace(token);
+
+        await refreshWorkspace(storedToken);
+
+        const storedConversationId = getStoredActiveConversationId();
+
+        if (storedConversationId) {
+          await openConversation(storedToken, storedConversationId, false);
+        }
       } catch {
-        clearStoredAccessToken();
-        setToken(null);
-        setCurrentUser(null);
+        resetAuthenticatedState();
+      } finally {
+        setIsBootstrapping(false);
       }
     }
 
     void restoreSession();
-  }, [token]);
+  }, []);
 
   async function refreshWorkspace(authToken = token) {
     if (!authToken) {
       return;
     }
 
-    const [memoryList, conversationList, auditList] = await Promise.all([
-      listMemories(authToken),
-      listConversations(authToken),
-      listAuditLogs(authToken),
-    ]);
+    setIsWorkspaceLoading(true);
 
-    setMemories(memoryList);
-    setConversations(conversationList);
-    setAuditLogs(auditList);
+    try {
+      const [memoryList, conversationList, auditList] = await Promise.all([
+        listMemories(authToken),
+        listConversations(authToken),
+        listAuditLogs(authToken),
+      ]);
+
+      setMemories(memoryList);
+      setConversations(conversationList);
+      setAuditLogs(auditList);
+    } finally {
+      setIsWorkspaceLoading(false);
+    }
+  }
+
+  async function openConversation(
+    authToken: string,
+    conversationId: string,
+    shouldSetStatus = true,
+  ) {
+    setIsWorkspaceLoading(true);
+    resetFeedback();
+
+    try {
+      const conversation = await getConversation(authToken, conversationId);
+
+      setActiveConversationId(conversation.id);
+      storeActiveConversationId(conversation.id);
+      setMessages(mapConversationToMessages(conversation));
+      setMemoryCandidates([]);
+
+      if (shouldSetStatus) {
+        setStatusMessage("Conversation reopened.");
+      }
+    } catch (error) {
+      clearActiveConversationId();
+      setActiveConversationId(undefined);
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setIsWorkspaceLoading(false);
+    }
   }
 
   function resetFeedback() {
@@ -106,10 +214,23 @@ function App() {
     setStatusMessage(null);
   }
 
+  function resetAuthenticatedState() {
+    clearStoredAccessToken();
+    clearActiveConversationId();
+    setToken(null);
+    setCurrentUser(null);
+    setMessages([]);
+    setMemoryCandidates([]);
+    setMemories([]);
+    setConversations([]);
+    setAuditLogs([]);
+    setActiveConversationId(undefined);
+  }
+
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetFeedback();
-    setIsLoading(true);
+    setIsAuthLoading(true);
 
     try {
       if (authMode === "register") {
@@ -125,29 +246,44 @@ function App() {
         password,
       });
 
+      clearActiveConversationId();
       storeAccessToken(login.access_token);
       setToken(login.access_token);
       setCurrentUser(login.user);
+      setActiveConversationId(undefined);
+      setMessages([]);
+      setMemoryCandidates([]);
+
       await refreshWorkspace(login.access_token);
+
       setStatusMessage("Welcome in. Akon is ready to listen.");
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Authentication failed.");
+      setErrorMessage(formatErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      setIsAuthLoading(false);
     }
   }
 
   function handleLogout() {
-    clearStoredAccessToken();
-    setToken(null);
-    setCurrentUser(null);
+    resetAuthenticatedState();
+    setStatusMessage("You are signed out.");
+  }
+
+  function handleNewConversation() {
+    clearActiveConversationId();
+    setActiveConversationId(undefined);
     setMessages([]);
     setMemoryCandidates([]);
-    setMemories([]);
-    setConversations([]);
-    setAuditLogs([]);
-    setActiveConversationId(undefined);
-    setStatusMessage("You are signed out.");
+    setChatInput("");
+    setStatusMessage("New conversation started.");
+  }
+
+  async function handleConversationClick(conversationId: string) {
+    if (!token) {
+      return;
+    }
+
+    await openConversation(token, conversationId);
   }
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -167,7 +303,7 @@ function App() {
 
     setMessages((current) => [...current, userMessage]);
     setChatInput("");
-    setIsLoading(true);
+    setIsChatLoading(true);
 
     try {
       const response: ChatResponse = await sendChatMessage(
@@ -177,6 +313,7 @@ function App() {
       );
 
       setActiveConversationId(response.conversation_id);
+      storeActiveConversationId(response.conversation_id);
       setMemoryCandidates(response.memory_candidates);
 
       setMessages((current) => [
@@ -190,9 +327,9 @@ function App() {
 
       await refreshWorkspace(token);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Chat request failed.");
+      setErrorMessage(formatErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      setIsChatLoading(false);
     }
   }
 
@@ -204,7 +341,7 @@ function App() {
       return;
     }
 
-    setIsLoading(true);
+    setIsMemoryLoading(true);
 
     try {
       await createMemory(token, {
@@ -220,10 +357,24 @@ function App() {
       setStatusMessage("Akon saved that understanding.");
       await refreshWorkspace(token);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Memory save failed.");
+      setErrorMessage(formatErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      setIsMemoryLoading(false);
     }
+  }
+
+  if (isBootstrapping) {
+    return (
+      <main className="app-shell boot-shell">
+        <div className="ambient-orb orb-one" />
+        <div className="ambient-orb orb-two" />
+        <section className="card boot-card">
+          <div className="pulse-dot" />
+          <h1>Opening your Akon space...</h1>
+          <p>Checking your session and preparing your companion workspace.</p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -234,7 +385,7 @@ function App() {
 
       <section className="hero-panel">
         <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.2.5</p>
+          <p className="eyebrow">Akon companion preview · v0.2.6</p>
           <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
             Akon is being shaped as a supportive AI companion that remembers with
@@ -261,10 +412,11 @@ function App() {
         </div>
       </section>
 
-      {(errorMessage || statusMessage) && (
+      {(errorMessage || statusMessage || isBusy) && (
         <section className="feedback-row">
           {errorMessage && <div className="alert error">{errorMessage}</div>}
           {statusMessage && <div className="alert success">{statusMessage}</div>}
+          {isBusy && <div className="alert loading">Akon is working...</div>}
         </section>
       )}
 
@@ -310,8 +462,8 @@ function App() {
               </label>
             )}
 
-            <button disabled={isLoading} type="submit">
-              {isLoading
+            <button disabled={isAuthLoading} type="submit">
+              {isAuthLoading
                 ? "Preparing..."
                 : authMode === "login"
                   ? "Enter Akon"
@@ -338,11 +490,28 @@ function App() {
               <div>
                 <p className="eyebrow">Conversation</p>
                 <h2>Talk with Akon</h2>
-                <p>Say what is true. Akon will help you slow it down and sort it out.</p>
+                <p>
+                  Say what is true. Akon will help you slow it down and sort it out.
+                </p>
+                {activeConversationId && (
+                  <small className="conversation-meta">
+                    Continuing conversation {activeConversationId.slice(0, 8)}...
+                  </small>
+                )}
               </div>
-              <button className="ghost-button" type="button" onClick={handleLogout}>
-                Leave space
-              </button>
+
+              <div className="header-actions">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={handleNewConversation}
+                >
+                  New conversation
+                </button>
+                <button className="ghost-button" type="button" onClick={handleLogout}>
+                  Leave space
+                </button>
+              </div>
             </div>
 
             <div className="message-list">
@@ -362,6 +531,13 @@ function App() {
                   </article>
                 ))
               )}
+
+              {isChatLoading && (
+                <article className="message assistant thinking">
+                  <strong>Akon</strong>
+                  <p>Thinking carefully...</p>
+                </article>
+              )}
             </div>
 
             <form className="chat-form" onSubmit={handleSendMessage}>
@@ -370,8 +546,8 @@ function App() {
                 placeholder="Tell Akon what is going on..."
                 onChange={(event) => setChatInput(event.target.value)}
               />
-              <button disabled={isLoading || !chatInput.trim()} type="submit">
-                Send
+              <button disabled={isChatLoading || !chatInput.trim()} type="submit">
+                {isChatLoading ? "Sending..." : "Send"}
               </button>
             </form>
 
@@ -421,8 +597,8 @@ function App() {
                   />
                 </label>
 
-                <button disabled={isLoading || !memoryContent.trim()} type="submit">
-                  Save understanding
+                <button disabled={isMemoryLoading || !memoryContent.trim()} type="submit">
+                  {isMemoryLoading ? "Saving..." : "Save understanding"}
                 </button>
               </form>
 
@@ -455,10 +631,14 @@ function App() {
                 ) : (
                   conversations.map((conversation) => (
                     <button
-                      className="list-button"
+                      className={
+                        conversation.id === activeConversationId
+                          ? "list-button active"
+                          : "list-button"
+                      }
                       key={conversation.id}
                       type="button"
-                      onClick={() => setActiveConversationId(conversation.id)}
+                      onClick={() => void handleConversationClick(conversation.id)}
                     >
                       <strong>{conversation.title || "Untitled conversation"}</strong>
                       <small>{conversation.safety_level || "No care level"}</small>

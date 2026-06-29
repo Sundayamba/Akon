@@ -3,6 +3,7 @@ import type {
   AuditLog,
   AuthUser,
   ChatResponse,
+  ConversationDetail,
   ConversationSummary,
   MemoryItem,
   TokenResponse,
@@ -13,6 +14,30 @@ const API_BASE_URL =
   "http://127.0.0.1:8000";
 
 const ACCESS_TOKEN_KEY = "akon_access_token";
+
+export const AUTH_EXPIRED_EVENT = "akon_auth_expired";
+
+export class ApiRequestError extends Error {
+  status: number;
+  code?: string;
+  requestId?: string;
+  details?: unknown;
+
+  constructor(params: {
+    message: string;
+    status: number;
+    code?: string;
+    requestId?: string;
+    details?: unknown;
+  }) {
+    super(params.message);
+    this.name = "ApiRequestError";
+    this.status = params.status;
+    this.code = params.code;
+    this.requestId = params.requestId;
+    this.details = params.details;
+  }
+}
 
 export function getStoredAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
@@ -26,18 +51,42 @@ export function clearStoredAccessToken(): void {
   localStorage.removeItem(ACCESS_TOKEN_KEY);
 }
 
-async function parseJsonResponse<T>(response: Response): Promise<T> {
+function dispatchAuthExpired(): void {
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
+
+async function parseJsonResponse<T>(
+  response: Response,
+  hadAuthToken: boolean,
+): Promise<T> {
   const rawText = await response.text();
 
-  const data = rawText ? JSON.parse(rawText) : null;
+  let data: unknown = null;
+
+  if (rawText) {
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = null;
+    }
+  }
 
   if (!response.ok) {
     const errorPayload = data as ApiErrorResponse | null;
-    const message =
-      errorPayload?.error?.message ||
-      `Request failed with status ${response.status}.`;
+    const error = errorPayload?.error;
 
-    throw new Error(message);
+    if (hadAuthToken && response.status === 401) {
+      clearStoredAccessToken();
+      dispatchAuthExpired();
+    }
+
+    throw new ApiRequestError({
+      message: error?.message || `Request failed with status ${response.status}.`,
+      status: response.status,
+      code: error?.code,
+      requestId: error?.request_id,
+      details: error?.details,
+    });
   }
 
   return data as T;
@@ -71,7 +120,7 @@ export async function apiRequest<T>(
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
 
-  return parseJsonResponse<T>(response);
+  return parseJsonResponse<T>(response, Boolean(options.token));
 }
 
 export async function registerUser(payload: {
@@ -120,6 +169,15 @@ export async function listConversations(
   token: string,
 ): Promise<ConversationSummary[]> {
   return apiRequest<ConversationSummary[]>("/chat/conversations", {
+    token,
+  });
+}
+
+export async function getConversation(
+  token: string,
+  conversationId: string,
+): Promise<ConversationDetail> {
+  return apiRequest<ConversationDetail>(`/chat/conversations/${conversationId}`, {
     token,
   });
 }
