@@ -5,7 +5,9 @@ import {
   AUTH_EXPIRED_EVENT,
   ApiRequestError,
   clearStoredAccessToken,
+  confirmMemoryCandidate,
   createMemory,
+  deleteMemory,
   getConversation,
   getCurrentUser,
   getStoredAccessToken,
@@ -14,8 +16,10 @@ import {
   listMemories,
   loginUser,
   registerUser,
+  revokeMemory,
   sendChatMessage,
   storeAccessToken,
+  updateMemory,
 } from "./lib/api";
 import type {
   AuditLog,
@@ -33,6 +37,15 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   safetyLevel?: string | null;
+};
+
+type MemoryEditState = {
+  id: string;
+  memoryType: string;
+  content: string;
+  confidence: string;
+  sensitivity: string;
+  consentState: string;
 };
 
 const ACTIVE_CONVERSATION_KEY = "akon_active_conversation_id";
@@ -72,6 +85,24 @@ function mapConversationToMessages(
   }));
 }
 
+function removeCandidateAtIndex(
+  candidates: MemoryCandidateItem[],
+  candidateIndex: number,
+): MemoryCandidateItem[] {
+  return candidates.filter((_, index) => index !== candidateIndex);
+}
+
+function buildMemoryEditState(memory: MemoryItem): MemoryEditState {
+  return {
+    id: memory.id,
+    memoryType: memory.memory_type,
+    content: memory.content,
+    confidence: memory.confidence,
+    sensitivity: memory.sensitivity,
+    consentState: memory.consent_state,
+  };
+}
+
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
@@ -91,6 +122,9 @@ function App() {
   const [memoryType, setMemoryType] = useState("preference");
   const [memoryContent, setMemoryContent] = useState("");
   const [memories, setMemories] = useState<MemoryItem[]>([]);
+  const [memoryEditState, setMemoryEditState] = useState<MemoryEditState | null>(null);
+  const [memoryActionId, setMemoryActionId] = useState<string | null>(null);
+
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
@@ -99,13 +133,19 @@ function App() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isMemoryLoading, setIsMemoryLoading] = useState(false);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
+  const [candidateActionIndex, setCandidateActionIndex] = useState<number | null>(null);
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isAuthenticated = Boolean(token && currentUser);
   const isBusy =
-    isAuthLoading || isChatLoading || isMemoryLoading || isWorkspaceLoading;
+    isAuthLoading ||
+    isChatLoading ||
+    isMemoryLoading ||
+    isWorkspaceLoading ||
+    candidateActionIndex !== null ||
+    memoryActionId !== null;
 
   const userLabel = useMemo(() => {
     if (!currentUser) {
@@ -222,6 +262,7 @@ function App() {
     setMessages([]);
     setMemoryCandidates([]);
     setMemories([]);
+    setMemoryEditState(null);
     setConversations([]);
     setAuditLogs([]);
     setActiveConversationId(undefined);
@@ -253,6 +294,7 @@ function App() {
       setActiveConversationId(undefined);
       setMessages([]);
       setMemoryCandidates([]);
+      setMemoryEditState(null);
 
       await refreshWorkspace(login.access_token);
 
@@ -363,6 +405,125 @@ function App() {
     }
   }
 
+  async function handleApproveCandidate(
+    candidate: MemoryCandidateItem,
+    candidateIndex: number,
+  ) {
+    if (!token) {
+      return;
+    }
+
+    resetFeedback();
+    setCandidateActionIndex(candidateIndex);
+
+    try {
+      await confirmMemoryCandidate(token, candidate);
+      setMemoryCandidates((current) => removeCandidateAtIndex(current, candidateIndex));
+      setStatusMessage("Memory approved and saved.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setCandidateActionIndex(null);
+    }
+  }
+
+  function handleIgnoreCandidate(candidateIndex: number) {
+    setMemoryCandidates((current) => removeCandidateAtIndex(current, candidateIndex));
+    setStatusMessage("Suggested memory ignored.");
+  }
+
+  function handleBeginEditMemory(memory: MemoryItem) {
+    resetFeedback();
+    setMemoryEditState(buildMemoryEditState(memory));
+  }
+
+  function handleCancelEditMemory() {
+    setMemoryEditState(null);
+    setStatusMessage("Memory edit cancelled.");
+  }
+
+  async function handleSubmitMemoryEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetFeedback();
+
+    if (!token || !memoryEditState || !memoryEditState.content.trim()) {
+      return;
+    }
+
+    setMemoryActionId(memoryEditState.id);
+
+    try {
+      await updateMemory(token, memoryEditState.id, {
+        memory_type: memoryEditState.memoryType,
+        content: memoryEditState.content.trim(),
+        confidence: memoryEditState.confidence,
+        sensitivity: memoryEditState.sensitivity,
+        consent_state: memoryEditState.consentState,
+      });
+
+      setMemoryEditState(null);
+      setStatusMessage("Memory updated.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
+  async function handleRevokeMemory(memory: MemoryItem) {
+    if (!token) {
+      return;
+    }
+
+    resetFeedback();
+    setMemoryActionId(memory.id);
+
+    try {
+      await revokeMemory(token, memory.id);
+      setMemoryEditState(null);
+      setStatusMessage("Memory revoked. Akon will stop using it.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
+  async function handleDeleteMemory(memory: MemoryItem) {
+    if (!token) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      "Delete this memory permanently? This cannot be undone.",
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    resetFeedback();
+    setMemoryActionId(memory.id);
+
+    try {
+      await deleteMemory(token, memory.id);
+
+      if (memoryEditState?.id === memory.id) {
+        setMemoryEditState(null);
+      }
+
+      setStatusMessage("Memory deleted permanently.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setMemoryActionId(null);
+    }
+  }
+
   if (isBootstrapping) {
     return (
       <main className="app-shell boot-shell">
@@ -385,7 +546,7 @@ function App() {
 
       <section className="hero-panel">
         <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.2.6</p>
+          <p className="eyebrow">Akon companion preview · v0.2.8</p>
           <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
             Akon is being shaped as a supportive AI companion that remembers with
@@ -553,12 +714,41 @@ function App() {
 
             {memoryCandidates.length > 0 && (
               <div className="candidate-box">
-                <h3>Akon noticed something it could remember</h3>
+                <div className="candidate-header">
+                  <div>
+                    <h3>Akon noticed something it could remember</h3>
+                    <p>
+                      Nothing is saved unless you approve it. Ignore anything that feels wrong.
+                    </p>
+                  </div>
+                </div>
+
                 {memoryCandidates.map((candidate, index) => (
-                  <div className="mini-item warm" key={`${candidate.memory_type}-${index}`}>
+                  <div
+                    className="mini-item warm candidate-card"
+                    key={`${candidate.memory_type}-${candidate.content}-${index}`}
+                  >
                     <strong>{candidate.memory_type}</strong>
                     <p>{candidate.content}</p>
                     <small>{candidate.reason}</small>
+
+                    <div className="candidate-actions">
+                      <button
+                        type="button"
+                        disabled={candidateActionIndex !== null}
+                        onClick={() => void handleApproveCandidate(candidate, index)}
+                      >
+                        {candidateActionIndex === index ? "Saving..." : "Approve memory"}
+                      </button>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        disabled={candidateActionIndex !== null}
+                        onClick={() => handleIgnoreCandidate(index)}
+                      >
+                        Ignore
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -570,7 +760,7 @@ function App() {
               <div className="card-header">
                 <p className="eyebrow">Understanding</p>
                 <h2>What Akon knows</h2>
-                <p>Save only what you want Akon to remember.</p>
+                <p>You can edit, revoke, or delete anything Akon remembers.</p>
               </div>
 
               <form className="stack-form" onSubmit={handleCreateMemory}>
@@ -602,19 +792,189 @@ function App() {
                 </button>
               </form>
 
-              <div className="scroll-list">
+              <div className="scroll-list memory-scroll-list">
                 {memories.length === 0 ? (
                   <p className="empty-state">No saved understanding yet.</p>
                 ) : (
-                  memories.map((memory) => (
-                    <div className="mini-item" key={memory.id}>
-                      <strong>{memory.memory_type}</strong>
-                      <p>{memory.content}</p>
-                      <small>
-                        {memory.confidence} · {memory.sensitivity} · {memory.consent_state}
-                      </small>
-                    </div>
-                  ))
+                  memories.map((memory) => {
+                    const isEditing = memoryEditState?.id === memory.id;
+                    const isActing = memoryActionId === memory.id;
+
+                    if (isEditing && memoryEditState) {
+                      return (
+                        <form
+                          className="mini-item memory-edit-card"
+                          key={memory.id}
+                          onSubmit={handleSubmitMemoryEdit}
+                        >
+                          <label>
+                            Type
+                            <select
+                              value={memoryEditState.memoryType}
+                              onChange={(event) =>
+                                setMemoryEditState((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        memoryType: event.target.value,
+                                      }
+                                    : current,
+                                )
+                              }
+                            >
+                              <option value="preference">Preference</option>
+                              <option value="goal">Goal</option>
+                              <option value="constraint">Constraint</option>
+                              <option value="emotional_baseline">Emotional baseline</option>
+                              <option value="cultural_context">Cultural context</option>
+                            </select>
+                          </label>
+
+                          <label>
+                            Content
+                            <textarea
+                              value={memoryEditState.content}
+                              onChange={(event) =>
+                                setMemoryEditState((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        content: event.target.value,
+                                      }
+                                    : current,
+                                )
+                              }
+                            />
+                          </label>
+
+                          <div className="memory-edit-grid">
+                            <label>
+                              Confidence
+                              <select
+                                value={memoryEditState.confidence}
+                                onChange={(event) =>
+                                  setMemoryEditState((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          confidence: event.target.value,
+                                        }
+                                      : current,
+                                  )
+                                }
+                              >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                            </label>
+
+                            <label>
+                              Sensitivity
+                              <select
+                                value={memoryEditState.sensitivity}
+                                onChange={(event) =>
+                                  setMemoryEditState((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          sensitivity: event.target.value,
+                                        }
+                                      : current,
+                                  )
+                                }
+                              >
+                                <option value="low">Low</option>
+                                <option value="high">High</option>
+                              </select>
+                            </label>
+                          </div>
+
+                          <label>
+                            Consent state
+                            <select
+                              value={memoryEditState.consentState}
+                              onChange={(event) =>
+                                setMemoryEditState((current) =>
+                                  current
+                                    ? {
+                                        ...current,
+                                        consentState: event.target.value,
+                                      }
+                                    : current,
+                                )
+                              }
+                            >
+                              <option value="explicit">Explicit</option>
+                              <option value="implicit">Implicit</option>
+                              <option value="revoked">Revoked</option>
+                            </select>
+                          </label>
+
+                          <div className="memory-actions">
+                            <button disabled={isActing} type="submit">
+                              {isActing ? "Saving..." : "Save changes"}
+                            </button>
+                            <button
+                              className="ghost-button"
+                              disabled={isActing}
+                              type="button"
+                              onClick={handleCancelEditMemory}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      );
+                    }
+
+                    return (
+                      <div className="mini-item memory-item-card" key={memory.id}>
+                        <div className="memory-item-header">
+                          <strong>{memory.memory_type}</strong>
+                          <span className={`memory-consent ${memory.consent_state}`}>
+                            {memory.consent_state}
+                          </span>
+                        </div>
+
+                        <p>{memory.content}</p>
+                        <small>
+                          {memory.confidence} · {memory.sensitivity} · {memory.source || "manual"}
+                        </small>
+
+                        <div className="memory-actions">
+                          <button
+                            className="ghost-button"
+                            disabled={Boolean(memoryActionId)}
+                            type="button"
+                            onClick={() => handleBeginEditMemory(memory)}
+                          >
+                            Edit
+                          </button>
+
+                          {memory.consent_state !== "revoked" && (
+                            <button
+                              className="ghost-button"
+                              disabled={Boolean(memoryActionId)}
+                              type="button"
+                              onClick={() => void handleRevokeMemory(memory)}
+                            >
+                              {isActing ? "Revoking..." : "Revoke"}
+                            </button>
+                          )}
+
+                          <button
+                            className="danger-button"
+                            disabled={Boolean(memoryActionId)}
+                            type="button"
+                            onClick={() => void handleDeleteMemory(memory)}
+                          >
+                            {isActing ? "Deleting..." : "Delete"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </section>

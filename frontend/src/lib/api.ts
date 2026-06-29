@@ -5,6 +5,7 @@ import type {
   ChatResponse,
   ConversationDetail,
   ConversationSummary,
+  MemoryCandidateItem,
   MemoryItem,
   TokenResponse,
 } from "../types";
@@ -203,6 +204,64 @@ export async function createMemory(
     method: "POST",
     token,
     body: payload,
+  });
+}
+
+export async function updateMemory(
+  token: string,
+  memoryId: string,
+  payload: {
+    memory_type?: string;
+    content?: string;
+    source?: string;
+    confidence?: string;
+    sensitivity?: string;
+    consent_state?: string;
+  },
+): Promise<MemoryItem> {
+  return apiRequest<MemoryItem>(`/memory/${memoryId}`, {
+    method: "PATCH",
+    token,
+    body: payload,
+  });
+}
+
+export async function revokeMemory(
+  token: string,
+  memoryId: string,
+): Promise<MemoryItem> {
+  return apiRequest<MemoryItem>(`/memory/${memoryId}/revoke`, {
+    method: "POST",
+    token,
+  });
+}
+
+export async function deleteMemory(
+  token: string,
+  memoryId: string,
+): Promise<void> {
+  return apiRequest<void>(`/memory/${memoryId}`, {
+    method: "DELETE",
+    token,
+  });
+}
+
+export async function confirmMemoryCandidate(
+  token: string,
+  candidate: MemoryCandidateItem,
+): Promise<MemoryItem> {
+  return apiRequest<MemoryItem>("/memory/confirm-candidate", {
+    method: "POST",
+    token,
+    body: {
+      memory_type: candidate.memory_type,
+      content: candidate.content,
+      source: candidate.source,
+      confidence: candidate.confidence,
+      sensitivity: candidate.sensitivity,
+      consent_required: candidate.consent_required,
+      user_confirmed: true,
+    },
   });
 }
 
