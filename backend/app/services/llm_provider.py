@@ -4,6 +4,7 @@ from openai import OpenAI
 
 from app.core.config import settings
 from app.core.system_prompt import AKON_SYSTEM_PROMPT
+from app.services.support_strategy_service import build_support_reply
 
 
 class LLMProviderError(RuntimeError):
@@ -30,54 +31,11 @@ class MockLLMProvider(BaseLLMProvider):
         detected_emotion: str | None,
         memory_context: str | None = None,
     ) -> str:
-        memory_note = ""
-
-        if memory_context:
-            memory_note = (
-                "\n\nI’m also taking into account what you’ve asked me to remember."
-            )
-
-        if detected_emotion == "angry":
-            return (
-                "I hear the frustration. Let’s cut the noise and deal with the next useful step. "
-                "Tell me exactly what failed, what you expected to happen, and what actually happened."
-                f"{memory_note}"
-            )
-
-        if detected_emotion in {"anxious", "overwhelmed", "stressed"}:
-            return (
-                "It sounds like your mind is carrying too much at once. "
-                "Let’s slow it down and choose one small step. "
-                "What is the one thing you need to handle first?"
-                f"{memory_note}"
-            )
-
-        if detected_emotion in {"sad", "lonely"}:
-            return (
-                "That sounds painful, and I won’t pretend it is small. "
-                "But we can separate what hurts from what you can do next. "
-                "What happened that made you feel this way?"
-                f"{memory_note}"
-            )
-
-        if detected_emotion == "confused":
-            return (
-                "That sounds unclear from the inside. Let's untangle it gently. "
-                "What is the part that feels most confusing right now?"
-                f"{memory_note}"
-            )
-
-        if detected_emotion in {"hopeful", "calm"}:
-            return (
-                "There is something steady in that. Let's use it carefully. "
-                "What would feel like the next honest step from here?"
-                f"{memory_note}"
-            )
-
-        return (
-            "I’m here with you. Tell me what is going on, and I’ll help you think through it "
-            "clearly, step by step, without judgment and without rushing you."
-            f"{memory_note}"
+        return build_support_reply(
+            user_message=message,
+            detected_emotion=detected_emotion,
+            safety_level=safety_level,
+            memory_context=memory_context,
         )
 
 

@@ -1,16 +1,17 @@
 from typing import Any
 
 from app.services.llm_provider import LLMProviderError, get_llm_provider
+from app.services.support_strategy_service import build_support_reply
 
 
 def _crisis_reply() -> str:
     return (
-        "I’m really sorry you’re carrying this right now. "
+        "I'm really sorry you're carrying this right now. "
         "Your safety matters more than solving everything in this moment. "
         "Are you in immediate danger, or have you already done anything that could harm you?\n\n"
         "If there is any immediate danger, please contact your local emergency service now "
         "or ask someone nearby to stay with you. If there is a trusted person close to you, "
-        "send them this simple message: “I’m not safe alone right now. Please stay with me.”\n\n"
+        'send them this simple message: "I\'m not safe alone right now. Please stay with me."\n\n'
         "Stay with me for a moment. What country are you in right now so I can guide you toward "
         "the right kind of urgent support?"
     )
@@ -18,61 +19,25 @@ def _crisis_reply() -> str:
 
 def _high_distress_reply() -> str:
     return (
-        "That sounds heavy, and I don’t want to rush past it. "
-        "Let’s slow it down. You do not need to solve everything at once.\n\n"
+        "That sounds heavy, and I don't want to rush past it. "
+        "Let's slow it down. You do not need to solve everything at once.\n\n"
         "For the next minute, focus only on this: breathe slowly, sit somewhere safe, "
         "and name the one thing that feels most urgent right now. "
         "What is the biggest pressure on you at this moment?"
     )
 
 
-def _fallback_reply(detected_emotion: str | None, memory_context: str | None = None) -> str:
-    memory_note = ""
-
-    if memory_context:
-        memory_note = "\n\nI’m also taking your saved context into account."
-
-    if detected_emotion == "angry":
-        return (
-            "I hear the frustration. Let’s cut the noise and deal with the next useful step. "
-            "Tell me exactly what failed, what you expected to happen, and what actually happened."
-            f"{memory_note}"
-        )
-
-    if detected_emotion in {"anxious", "overwhelmed", "stressed"}:
-        return (
-            "It sounds like your mind is carrying too much at once. "
-            "Let’s slow it down and choose one small step. "
-            "What is the one thing you need to handle first?"
-            f"{memory_note}"
-        )
-
-    if detected_emotion in {"sad", "lonely"}:
-        return (
-            "That sounds painful, and I won’t pretend it is small. "
-            "But we can separate what hurts from what you can do next. "
-            "What happened that made you feel this way?"
-            f"{memory_note}"
-        )
-
-    if detected_emotion == "confused":
-        return (
-            "That sounds unclear from the inside. Let's untangle it gently. "
-            "What is the part that feels most confusing right now?"
-            f"{memory_note}"
-        )
-
-    if detected_emotion in {"hopeful", "calm"}:
-        return (
-            "There is something steady in that. Let's use it carefully. "
-            "What would feel like the next honest step from here?"
-            f"{memory_note}"
-        )
-
-    return (
-        "I’m here with you. Tell me what is going on, and I’ll help you think through it "
-        "clearly, step by step, without judgment and without rushing you."
-        f"{memory_note}"
+def _fallback_reply(
+    message: str,
+    safety_level: str,
+    detected_emotion: str | None,
+    memory_context: str | None = None,
+) -> str:
+    return build_support_reply(
+        user_message=message,
+        detected_emotion=detected_emotion,
+        safety_level=safety_level,
+        memory_context=memory_context,
     )
 
 
@@ -106,6 +71,8 @@ def generate_akon_reply(
         )
     except LLMProviderError:
         return _fallback_reply(
+            message=message,
+            safety_level=safety_level,
             detected_emotion=detected_emotion,
             memory_context=memory_context,
         )
