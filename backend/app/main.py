@@ -14,16 +14,13 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
 from app.api.routes.memory import router as memory_router
 from app.core.config import settings
-from app.db.database import Base, engine
-from app.models import AuditLog, Conversation, MemoryItem, Message, User  # noqa: F401
 
 
-API_VERSION = "0.2.0"
+API_VERSION = "0.2.1"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    Base.metadata.create_all(bind=engine)
     yield
 
 
