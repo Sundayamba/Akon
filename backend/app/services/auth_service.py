@@ -20,6 +20,52 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
+def validate_password_policy(
+    *,
+    password: str,
+    email: str | None = None,
+) -> list[str]:
+    violations: list[str] = []
+
+    if len(password) < 10:
+        violations.append("Password must be at least 10 characters long.")
+
+    if not any(character.isalpha() for character in password):
+        violations.append("Password must include at least one letter.")
+
+    if not any(character.isdigit() for character in password):
+        violations.append("Password must include at least one number.")
+
+    if password.lower() in {"password", "password123", "strongpassword"}:
+        violations.append("Password is too common.")
+
+    if email:
+        normalized_email = normalize_email(email)
+        email_local_part = normalized_email.split("@")[0]
+
+        if email_local_part and email_local_part in password.lower():
+            violations.append("Password must not contain the email username.")
+
+    return violations
+
+
+def ensure_password_policy(
+    *,
+    password: str,
+    email: str | None = None,
+) -> None:
+    violations = validate_password_policy(
+        password=password,
+        email=email,
+    )
+
+    if violations:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password does not meet security requirements.",
+        )
+
+
 def hash_password(password: str) -> str:
     password_bytes = password.encode("utf-8")
     salt = bcrypt.gensalt()
@@ -32,7 +78,10 @@ def verify_password(password: str, password_hash: str) -> bool:
     password_bytes = password.encode("utf-8")
     password_hash_bytes = password_hash.encode("utf-8")
 
-    return bcrypt.checkpw(password_bytes, password_hash_bytes)
+    try:
+        return bcrypt.checkpw(password_bytes, password_hash_bytes)
+    except ValueError:
+        return False
 
 
 def create_access_token(
@@ -43,13 +92,14 @@ def create_access_token(
     expire_delta = expires_delta or timedelta(
         minutes=settings.access_token_expire_minutes
     )
-    expires_at = datetime.now(UTC) + expire_delta
+    issued_at = datetime.now(UTC)
+    expires_at = issued_at + expire_delta
 
     payload: dict[str, Any] = {
         "sub": subject,
         "type": "access",
         "exp": expires_at,
-        "iat": datetime.now(UTC),
+        "iat": issued_at,
     }
 
     token = jwt.encode(

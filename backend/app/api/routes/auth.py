@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
 from app.schemas.auth import (
@@ -13,11 +14,13 @@ from app.services.audit_service import create_audit_log
 from app.services.auth_service import (
     authenticate_user,
     create_access_token,
+    ensure_password_policy,
     get_current_user,
     get_user_by_email,
     hash_password,
     normalize_email,
 )
+from app.services.rate_limit_service import check_rate_limit
 
 router = APIRouter()
 
@@ -42,6 +45,17 @@ def register_user(
     db: Session = Depends(get_db),
 ) -> AuthUserResponse:
     normalized_email = normalize_email(payload.email)
+
+    check_rate_limit(
+        key=f"auth:register:{normalized_email}",
+        max_attempts=settings.auth_rate_limit_max_attempts,
+        window_seconds=settings.auth_rate_limit_window_seconds,
+    )
+
+    ensure_password_policy(
+        password=payload.password,
+        email=normalized_email,
+    )
 
     existing_user = get_user_by_email(
         db=db,
@@ -89,9 +103,17 @@ def login_user(
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
+    normalized_email = normalize_email(payload.email)
+
+    check_rate_limit(
+        key=f"auth:login:{normalized_email}",
+        max_attempts=settings.auth_rate_limit_max_attempts,
+        window_seconds=settings.auth_rate_limit_window_seconds,
+    )
+
     user = authenticate_user(
         db=db,
-        email=payload.email,
+        email=normalized_email,
         password=payload.password,
     )
 
@@ -105,7 +127,7 @@ def login_user(
             risk_level="medium",
             source="auth_route",
             details={
-                "email_domain": payload.email.split("@")[-1].lower(),
+                "email_domain": normalized_email.split("@")[-1],
             },
         )
         db.commit()
