@@ -1,14 +1,24 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.helpers import auth_headers
 
 
 client = TestClient(app)
 
 
+def test_memory_routes_require_auth() -> None:
+    response = client.get("/memory")
+
+    assert response.status_code in {401, 403}
+
+
 def test_create_memory() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "preference",
             "content": "User prefers direct, step-by-step guidance.",
@@ -31,8 +41,11 @@ def test_create_memory() -> None:
 
 
 def test_confirm_memory_candidate_saves_explicit_memory() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/memory/confirm-candidate",
+        headers=headers,
         json={
             "memory_type": "preference",
             "content": "User prefers concise, direct guidance.",
@@ -55,8 +68,11 @@ def test_confirm_memory_candidate_saves_explicit_memory() -> None:
 
 
 def test_confirm_memory_candidate_requires_user_confirmation() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/memory/confirm-candidate",
+        headers=headers,
         json={
             "memory_type": "preference",
             "content": "User prefers concise, direct guidance.",
@@ -72,8 +88,11 @@ def test_confirm_memory_candidate_requires_user_confirmation() -> None:
 
 
 def test_list_memories() -> None:
+    headers = auth_headers(client)
+
     client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "goal",
             "content": "User wants Akon to become a strong AI companion MVP.",
@@ -84,15 +103,21 @@ def test_list_memories() -> None:
         },
     )
 
-    response = client.get("/memory")
+    response = client.get(
+        "/memory",
+        headers=headers,
+    )
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
 def test_get_memory_by_id() -> None:
+    headers = auth_headers(client)
+
     create_response = client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "preference",
             "content": "User prefers structured guidance.",
@@ -105,7 +130,10 @@ def test_get_memory_by_id() -> None:
 
     memory_id = create_response.json()["id"]
 
-    response = client.get(f"/memory/{memory_id}")
+    response = client.get(
+        f"/memory/{memory_id}",
+        headers=headers,
+    )
 
     assert response.status_code == 200
 
@@ -117,14 +145,22 @@ def test_get_memory_by_id() -> None:
 
 
 def test_get_unknown_memory_returns_404() -> None:
-    response = client.get("/memory/unknown-memory-id")
+    headers = auth_headers(client)
+
+    response = client.get(
+        "/memory/unknown-memory-id",
+        headers=headers,
+    )
 
     assert response.status_code == 404
 
 
 def test_update_memory() -> None:
+    headers = auth_headers(client)
+
     create_response = client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "preference",
             "content": "User likes short answers.",
@@ -139,6 +175,7 @@ def test_update_memory() -> None:
 
     update_response = client.patch(
         f"/memory/{memory_id}",
+        headers=headers,
         json={
             "content": "User prefers concise but complete answers.",
             "confidence": "high",
@@ -155,8 +192,11 @@ def test_update_memory() -> None:
 
 
 def test_revoke_memory() -> None:
+    headers = auth_headers(client)
+
     create_response = client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "preference",
             "content": "User prefers motivational guidance.",
@@ -169,7 +209,10 @@ def test_revoke_memory() -> None:
 
     memory_id = create_response.json()["id"]
 
-    revoke_response = client.post(f"/memory/{memory_id}/revoke")
+    revoke_response = client.post(
+        f"/memory/{memory_id}/revoke",
+        headers=headers,
+    )
 
     assert revoke_response.status_code == 200
 
@@ -180,14 +223,22 @@ def test_revoke_memory() -> None:
 
 
 def test_revoke_unknown_memory_returns_404() -> None:
-    response = client.post("/memory/unknown-memory-id/revoke")
+    headers = auth_headers(client)
+
+    response = client.post(
+        "/memory/unknown-memory-id/revoke",
+        headers=headers,
+    )
 
     assert response.status_code == 404
 
 
 def test_delete_memory() -> None:
+    headers = auth_headers(client)
+
     create_response = client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "constraint",
             "content": "User has limited time for development sessions.",
@@ -200,14 +251,20 @@ def test_delete_memory() -> None:
 
     memory_id = create_response.json()["id"]
 
-    delete_response = client.delete(f"/memory/{memory_id}")
+    delete_response = client.delete(
+        f"/memory/{memory_id}",
+        headers=headers,
+    )
 
     assert delete_response.status_code == 204
 
 
 def test_clear_all_memories() -> None:
+    headers = auth_headers(client)
+
     client.post(
         "/memory",
+        headers=headers,
         json={
             "memory_type": "goal",
             "content": "User wants to build Akon carefully.",
@@ -218,19 +275,28 @@ def test_clear_all_memories() -> None:
         },
     )
 
-    delete_response = client.delete("/memory")
+    delete_response = client.delete(
+        "/memory",
+        headers=headers,
+    )
 
     assert delete_response.status_code == 204
 
-    list_response = client.get("/memory")
+    list_response = client.get(
+        "/memory",
+        headers=headers,
+    )
 
     assert list_response.status_code == 200
     assert list_response.json() == []
 
 
 def test_update_unknown_memory_returns_404() -> None:
+    headers = auth_headers(client)
+
     response = client.patch(
         "/memory/unknown-memory-id",
+        headers=headers,
         json={
             "content": "This should not exist.",
         },
@@ -240,6 +306,49 @@ def test_update_unknown_memory_returns_404() -> None:
 
 
 def test_delete_unknown_memory_returns_404() -> None:
-    response = client.delete("/memory/unknown-memory-id")
+    headers = auth_headers(client)
+
+    response = client.delete(
+        "/memory/unknown-memory-id",
+        headers=headers,
+    )
 
     assert response.status_code == 404
+
+
+def test_user_cannot_access_another_users_memory() -> None:
+    user_one_headers = auth_headers(
+        client,
+        email="user-one@example.com",
+        display_name="User One",
+    )
+
+    user_two_headers = auth_headers(
+        client,
+        email="user-two@example.com",
+        display_name="User Two",
+    )
+
+    create_response = client.post(
+        "/memory",
+        headers=user_one_headers,
+        json={
+            "memory_type": "preference",
+            "content": "Private memory for user one.",
+            "source": "manual",
+            "confidence": "high",
+            "sensitivity": "low",
+            "consent_state": "explicit",
+        },
+    )
+
+    assert create_response.status_code == 201
+
+    memory_id = create_response.json()["id"]
+
+    unauthorized_response = client.get(
+        f"/memory/{memory_id}",
+        headers=user_two_headers,
+    )
+
+    assert unauthorized_response.status_code == 404

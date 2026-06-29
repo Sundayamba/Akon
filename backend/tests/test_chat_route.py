@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.helpers import auth_headers
 
 
 client = TestClient(app)
@@ -16,9 +17,21 @@ def test_health_check() -> None:
     }
 
 
-def test_chat_message_returns_reply() -> None:
+def test_chat_message_requires_auth() -> None:
     response = client.post(
         "/chat/message",
+        json={"message": "I feel overwhelmed."},
+    )
+
+    assert response.status_code in {401, 403}
+
+
+def test_chat_message_returns_reply() -> None:
+    headers = auth_headers(client)
+
+    response = client.post(
+        "/chat/message",
+        headers=headers,
         json={"message": "I feel overwhelmed and I do not know what to do next."},
     )
 
@@ -35,8 +48,11 @@ def test_chat_message_returns_reply() -> None:
 
 
 def test_chat_message_returns_memory_candidate() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/chat/message",
+        headers=headers,
         json={"message": "I prefer direct step-by-step guidance."},
     )
 
@@ -51,8 +67,11 @@ def test_chat_message_returns_memory_candidate() -> None:
 
 
 def test_crisis_message_does_not_return_memory_candidate() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/chat/message",
+        headers=headers,
         json={"message": "I want to kill myself."},
     )
 
@@ -65,8 +84,11 @@ def test_crisis_message_does_not_return_memory_candidate() -> None:
 
 
 def test_chat_message_rejects_empty_message() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/chat/message",
+        headers=headers,
         json={"message": ""},
     )
 
@@ -74,20 +96,29 @@ def test_chat_message_rejects_empty_message() -> None:
 
 
 def test_list_conversations_returns_list() -> None:
+    headers = auth_headers(client)
+
     client.post(
         "/chat/message",
+        headers=headers,
         json={"message": "Hello Akon, help me plan my day."},
     )
 
-    response = client.get("/chat/conversations")
+    response = client.get(
+        "/chat/conversations",
+        headers=headers,
+    )
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
 
 def test_get_conversation_returns_messages() -> None:
+    headers = auth_headers(client)
+
     create_response = client.post(
         "/chat/message",
+        headers=headers,
         json={"message": "I am excited about building Akon."},
     )
 
@@ -95,7 +126,10 @@ def test_get_conversation_returns_messages() -> None:
 
     conversation_id = create_response.json()["conversation_id"]
 
-    detail_response = client.get(f"/chat/conversations/{conversation_id}")
+    detail_response = client.get(
+        f"/chat/conversations/{conversation_id}",
+        headers=headers,
+    )
 
     assert detail_response.status_code == 200
 
@@ -112,6 +146,42 @@ def test_get_conversation_returns_messages() -> None:
 
 
 def test_get_unknown_conversation_returns_404() -> None:
-    response = client.get("/chat/conversations/unknown-conversation-id")
+    headers = auth_headers(client)
+
+    response = client.get(
+        "/chat/conversations/unknown-conversation-id",
+        headers=headers,
+    )
 
     assert response.status_code == 404
+
+
+def test_user_cannot_access_another_users_conversation() -> None:
+    user_one_headers = auth_headers(
+        client,
+        email="user-one@example.com",
+        display_name="User One",
+    )
+
+    user_two_headers = auth_headers(
+        client,
+        email="user-two@example.com",
+        display_name="User Two",
+    )
+
+    create_response = client.post(
+        "/chat/message",
+        headers=user_one_headers,
+        json={"message": "This is user one's private conversation."},
+    )
+
+    assert create_response.status_code == 200
+
+    conversation_id = create_response.json()["conversation_id"]
+
+    unauthorized_response = client.get(
+        f"/chat/conversations/{conversation_id}",
+        headers=user_two_headers,
+    )
+
+    assert unauthorized_response.status_code == 404

@@ -69,6 +69,7 @@ def register_user(
         action="auth.user.registered",
         entity_type="user",
         entity_id=user.id,
+        actor_user_id=user.id,
         risk_level="low",
         source="auth_route",
         details={
@@ -100,6 +101,7 @@ def login_user(
             action="auth.login.failed",
             entity_type="user",
             entity_id=None,
+            actor_user_id=None,
             risk_level="medium",
             source="auth_route",
             details={
@@ -120,6 +122,7 @@ def login_user(
         action="auth.login.succeeded",
         entity_type="user",
         entity_id=user.id,
+        actor_user_id=user.id,
         risk_level="low",
         source="auth_route",
         details={

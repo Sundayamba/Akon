@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.helpers import auth_headers
 
 
 client = TestClient(app)
@@ -15,7 +16,7 @@ def test_root_returns_api_metadata() -> None:
 
     assert data["service"] == "akon-api"
     assert data["name"] == "Akon"
-    assert data["version"] == "0.1.9"
+    assert data["version"] == "0.2.0"
     assert data["environment"] == "development"
     assert data["status"] == "ok"
 
@@ -28,7 +29,7 @@ def test_version_returns_version_metadata() -> None:
     data = response.json()
 
     assert data["service"] == "akon-api"
-    assert data["version"] == "0.1.9"
+    assert data["version"] == "0.2.0"
     assert data["environment"] == "development"
 
 
@@ -67,8 +68,11 @@ def test_unknown_route_uses_standard_error_shape() -> None:
 
 
 def test_validation_error_uses_standard_error_shape() -> None:
+    headers = auth_headers(client)
+
     response = client.post(
         "/chat/message",
+        headers=headers,
         json={
             "message": "",
         },

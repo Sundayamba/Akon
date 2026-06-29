@@ -18,7 +18,7 @@ from app.db.database import Base, engine
 from app.models import AuditLog, Conversation, MemoryItem, Message, User  # noqa: F401
 
 
-API_VERSION = "0.1.9"
+API_VERSION = "0.2.0"
 
 
 @asynccontextmanager

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import DateTime, JSON, String
+from sqlalchemy import DateTime, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -15,6 +15,12 @@ class AuditLog(Base):
         String(36),
         primary_key=True,
         default=lambda: str(uuid4()),
+    )
+    actor_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
     )
     action: Mapped[str] = mapped_column(
         String(100),

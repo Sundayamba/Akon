@@ -15,6 +15,12 @@ class Conversation(Base):
         primary_key=True,
         default=lambda: str(uuid4()),
     )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     channel: Mapped[str] = mapped_column(String(20), default="text")
     safety_level: Mapped[str | None] = mapped_column(String(10), nullable=True)
@@ -45,6 +51,12 @@ class Message(Base):
     conversation_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("conversations.id"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id"),
         nullable=False,
         index=True,
     )

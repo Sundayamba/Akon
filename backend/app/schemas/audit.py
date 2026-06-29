@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 class AuditLogResponse(BaseModel):
     id: str
+    actor_user_id: str | None = None
     action: str
     entity_type: str
     entity_id: str | None = None

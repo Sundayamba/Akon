@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.memory import MemoryItem
+from app.models.user import User
 from app.schemas.memory import (
     MemoryCandidateConfirmRequest,
     MemoryCreateRequest,
@@ -11,6 +12,7 @@ from app.schemas.memory import (
     MemoryUpdateRequest,
 )
 from app.services.audit_service import create_audit_log
+from app.services.auth_service import get_current_user
 
 router = APIRouter()
 
@@ -50,12 +52,32 @@ def _safe_memory_details(memory: MemoryItem) -> dict[str, str | int | None]:
     }
 
 
+def _get_owned_memory(
+    db: Session,
+    *,
+    memory_id: str,
+    current_user: User,
+) -> MemoryItem:
+    memory = db.get(MemoryItem, memory_id)
+
+    if memory is None or memory.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404,
+            detail="Memory not found.",
+        )
+
+    return memory
+
+
 @router.get("", response_model=list[MemoryItemResponse])
 def list_memories(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[MemoryItemResponse]:
     memories = db.scalars(
-        select(MemoryItem).order_by(MemoryItem.updated_at.desc())
+        select(MemoryItem)
+        .where(MemoryItem.user_id == current_user.id)
+        .order_by(MemoryItem.updated_at.desc())
     ).all()
 
     return [_to_memory_response(memory) for memory in memories]
@@ -68,9 +90,11 @@ def list_memories(
 )
 def create_memory(
     payload: MemoryCreateRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MemoryItemResponse:
     memory = MemoryItem(
+        user_id=current_user.id,
         memory_type=payload.memory_type,
         content=payload.content,
         source=payload.source,
@@ -87,6 +111,7 @@ def create_memory(
         action="memory.created",
         entity_type="memory",
         entity_id=memory.id,
+        actor_user_id=current_user.id,
         risk_level=_audit_risk_from_memory(memory),
         source="memory_route",
         details=_safe_memory_details(memory),
@@ -105,6 +130,7 @@ def create_memory(
 )
 def confirm_memory_candidate(
     payload: MemoryCandidateConfirmRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MemoryItemResponse:
     if not payload.user_confirmed:
@@ -114,6 +140,7 @@ def confirm_memory_candidate(
         )
 
     memory = MemoryItem(
+        user_id=current_user.id,
         memory_type=payload.memory_type,
         content=payload.content,
         source=payload.source or "chat_candidate",
@@ -130,6 +157,7 @@ def confirm_memory_candidate(
         action="memory.candidate.confirmed",
         entity_type="memory",
         entity_id=memory.id,
+        actor_user_id=current_user.id,
         risk_level=_audit_risk_from_memory(memory),
         source="memory_route",
         details={
@@ -148,15 +176,14 @@ def confirm_memory_candidate(
 @router.get("/{memory_id}", response_model=MemoryItemResponse)
 def get_memory(
     memory_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MemoryItemResponse:
-    memory = db.get(MemoryItem, memory_id)
-
-    if memory is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Memory not found.",
-        )
+    memory = _get_owned_memory(
+        db=db,
+        memory_id=memory_id,
+        current_user=current_user,
+    )
 
     return _to_memory_response(memory)
 
@@ -165,15 +192,14 @@ def get_memory(
 def update_memory(
     memory_id: str,
     payload: MemoryUpdateRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MemoryItemResponse:
-    memory = db.get(MemoryItem, memory_id)
-
-    if memory is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Memory not found.",
-        )
+    memory = _get_owned_memory(
+        db=db,
+        memory_id=memory_id,
+        current_user=current_user,
+    )
 
     update_data = payload.model_dump(exclude_unset=True)
     updated_fields = sorted(update_data.keys())
@@ -188,6 +214,7 @@ def update_memory(
         action="memory.updated",
         entity_type="memory",
         entity_id=memory.id,
+        actor_user_id=current_user.id,
         risk_level=_audit_risk_from_memory(memory),
         source="memory_route",
         details={
@@ -205,15 +232,14 @@ def update_memory(
 @router.post("/{memory_id}/revoke", response_model=MemoryItemResponse)
 def revoke_memory(
     memory_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> MemoryItemResponse:
-    memory = db.get(MemoryItem, memory_id)
-
-    if memory is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Memory not found.",
-        )
+    memory = _get_owned_memory(
+        db=db,
+        memory_id=memory_id,
+        current_user=current_user,
+    )
 
     memory.consent_state = "revoked"
 
@@ -224,6 +250,7 @@ def revoke_memory(
         action="memory.revoked",
         entity_type="memory",
         entity_id=memory.id,
+        actor_user_id=current_user.id,
         risk_level="medium",
         source="memory_route",
         details=_safe_memory_details(memory),
@@ -238,21 +265,21 @@ def revoke_memory(
 @router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_memory(
     memory_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    memory = db.get(MemoryItem, memory_id)
-
-    if memory is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Memory not found.",
-        )
+    memory = _get_owned_memory(
+        db=db,
+        memory_id=memory_id,
+        current_user=current_user,
+    )
 
     create_audit_log(
         db,
         action="memory.deleted",
         entity_type="memory",
         entity_id=memory.id,
+        actor_user_id=current_user.id,
         risk_level=_audit_risk_from_memory(memory),
         source="memory_route",
         details=_safe_memory_details(memory),
@@ -264,9 +291,12 @@ def delete_memory(
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 def clear_all_memories(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> None:
-    memories = db.scalars(select(MemoryItem)).all()
+    memories = db.scalars(
+        select(MemoryItem).where(MemoryItem.user_id == current_user.id)
+    ).all()
 
     memory_count = len(memories)
 
@@ -275,6 +305,7 @@ def clear_all_memories(
         action="memory.cleared",
         entity_type="memory",
         entity_id=None,
+        actor_user_id=current_user.id,
         risk_level="high" if memory_count > 0 else "low",
         source="memory_route",
         details={

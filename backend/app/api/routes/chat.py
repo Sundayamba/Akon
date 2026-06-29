@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.conversation import Conversation, Message
+from app.models.user import User
 from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
@@ -16,6 +17,7 @@ from app.schemas.chat import (
 )
 from app.services.akon_engine import generate_akon_reply
 from app.services.audit_service import create_audit_log
+from app.services.auth_service import get_current_user
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
 from app.services.safety_service import classify_safety
@@ -48,15 +50,23 @@ def _audit_risk_from_safety_level(safety_level: str) -> str:
 @router.post("/message", response_model=ChatMessageResponse)
 def send_chat_message(
     payload: ChatMessageRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatMessageResponse:
     conversation_id = payload.conversation_id or str(uuid4())
 
     conversation = db.get(Conversation, conversation_id)
 
+    if conversation is not None and conversation.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found.",
+        )
+
     if conversation is None:
         conversation = Conversation(
             id=conversation_id,
+            user_id=current_user.id,
             title=_create_conversation_title(payload.message),
             channel="text",
         )
@@ -67,6 +77,7 @@ def send_chat_message(
 
     memory_context = retrieve_memory_context(
         db=db,
+        user_id=current_user.id,
         message=payload.message,
     )
 
@@ -98,6 +109,7 @@ def send_chat_message(
 
     user_message = Message(
         conversation_id=conversation.id,
+        user_id=current_user.id,
         role="user",
         content=payload.message,
         safety_level=safety_result["level"],
@@ -106,6 +118,7 @@ def send_chat_message(
 
     assistant_message = Message(
         conversation_id=conversation.id,
+        user_id=current_user.id,
         role="assistant",
         content=reply,
         safety_level=safety_result["level"],
@@ -121,6 +134,7 @@ def send_chat_message(
         action="chat.message.created",
         entity_type="conversation",
         entity_id=conversation.id,
+        actor_user_id=current_user.id,
         risk_level=_audit_risk_from_safety_level(safety_result["level"]),
         source="chat_route",
         details={
@@ -147,10 +161,12 @@ def send_chat_message(
 
 @router.get("/conversations", response_model=list[ConversationSummary])
 def list_conversations(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[ConversationSummary]:
     conversations = db.scalars(
         select(Conversation)
+        .where(Conversation.user_id == current_user.id)
         .order_by(Conversation.updated_at.desc())
         .limit(50)
     ).all()
@@ -174,11 +190,12 @@ def list_conversations(
 )
 def get_conversation(
     conversation_id: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConversationDetailResponse:
     conversation = db.get(Conversation, conversation_id)
 
-    if conversation is None:
+    if conversation is None or conversation.user_id != current_user.id:
         raise HTTPException(
             status_code=404,
             detail="Conversation not found.",
@@ -187,6 +204,7 @@ def get_conversation(
     messages = db.scalars(
         select(Message)
         .where(Message.conversation_id == conversation.id)
+        .where(Message.user_id == current_user.id)
         .order_by(Message.created_at.asc())
     ).all()
 

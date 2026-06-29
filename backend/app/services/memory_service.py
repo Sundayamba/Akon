@@ -19,6 +19,8 @@ def _score_memory(message_tokens: set[str], memory: MemoryItem) -> int:
 
 def retrieve_memory_context(
     db: Session,
+    *,
+    user_id: str,
     message: str,
     limit: int = 5,
 ) -> str | None:
@@ -27,9 +29,14 @@ def retrieve_memory_context(
 
     This is a temporary keyword-based MVP retrieval system.
     Later we will replace this with embeddings/vector search.
+
+    Important:
+    - Retrieval is scoped to the authenticated user.
+    - Revoked memories are excluded.
     """
     memories = db.scalars(
         select(MemoryItem)
+        .where(MemoryItem.user_id == user_id)
         .where(MemoryItem.consent_state != "revoked")
         .order_by(MemoryItem.updated_at.desc())
     ).all()

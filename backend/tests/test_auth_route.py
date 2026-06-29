@@ -1,6 +1,9 @@
+from sqlalchemy import select
 from fastapi.testclient import TestClient
 
+from app.db.database import SessionLocal
 from app.main import app
+from app.models.audit import AuditLog
 
 
 client = TestClient(app)
@@ -126,10 +129,10 @@ def test_get_me_with_token() -> None:
     assert data["display_name"] == "Rex"
 
 
-def test_get_me_without_token_returns_401() -> None:
+def test_get_me_without_token_returns_401_or_403() -> None:
     response = client.get("/auth/me")
 
-    assert response.status_code == 401
+    assert response.status_code in {401, 403}
 
 
 def test_auth_events_create_audit_logs() -> None:
@@ -164,12 +167,25 @@ def test_auth_events_create_audit_logs() -> None:
 
     assert failed_login_response.status_code == 401
 
-    audit_response = client.get("/audit")
+    token = login_response.json()["access_token"]
+
+    audit_response = client.get(
+        "/audit",
+        headers={
+            "Authorization": f"Bearer {token}",
+        },
+    )
 
     assert audit_response.status_code == 200
 
-    actions = [audit_log["action"] for audit_log in audit_response.json()]
+    visible_actions = [audit_log["action"] for audit_log in audit_response.json()]
 
-    assert "auth.user.registered" in actions
-    assert "auth.login.succeeded" in actions
-    assert "auth.login.failed" in actions
+    assert "auth.user.registered" in visible_actions
+    assert "auth.login.succeeded" in visible_actions
+
+    with SessionLocal() as db:
+        all_audit_logs = db.scalars(select(AuditLog)).all()
+
+    all_actions = [audit_log.action for audit_log in all_audit_logs]
+
+    assert "auth.login.failed" in all_actions

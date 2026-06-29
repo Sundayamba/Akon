@@ -11,6 +11,7 @@ def create_audit_log(
     action: str,
     entity_type: str,
     entity_id: str | None = None,
+    actor_user_id: str | None = None,
     risk_level: str = "low",
     source: str = "system",
     details: dict[str, Any] | None = None,
@@ -21,6 +22,7 @@ def create_audit_log(
     This function does not commit. The caller controls the transaction.
     """
     audit_log = AuditLog(
+        actor_user_id=actor_user_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
