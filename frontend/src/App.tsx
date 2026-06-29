@@ -129,7 +129,7 @@ function App() {
       setToken(login.access_token);
       setCurrentUser(login.user);
       await refreshWorkspace(login.access_token);
-      setStatusMessage("Authenticated successfully.");
+      setStatusMessage("Welcome in. Akon is ready to listen.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Authentication failed.");
     } finally {
@@ -147,7 +147,7 @@ function App() {
     setConversations([]);
     setAuditLogs([]);
     setActiveConversationId(undefined);
-    setStatusMessage("Logged out.");
+    setStatusMessage("You are signed out.");
   }
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -217,7 +217,7 @@ function App() {
       });
 
       setMemoryContent("");
-      setStatusMessage("Memory saved.");
+      setStatusMessage("Akon saved that understanding.");
       await refreshWorkspace(token);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Memory save failed.");
@@ -228,20 +228,36 @@ function App() {
 
   return (
     <main className="app-shell">
+      <div className="ambient-orb orb-one" />
+      <div className="ambient-orb orb-two" />
+      <div className="ambient-orb orb-three" />
+
       <section className="hero-panel">
-        <div>
-          <p className="eyebrow">Akon v0.2.4</p>
-          <h1>Supportive AI Companion</h1>
+        <div className="hero-content">
+          <p className="eyebrow">Akon companion preview · v0.2.5</p>
+          <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
-            Authenticated chat, memory, conversations, and audit visibility wired
-            to the real Akon backend.
+            Akon is being shaped as a supportive AI companion that remembers with
+            permission, responds with care, and helps you turn heavy moments into
+            clear next steps.
           </p>
+
+          <div className="hero-pills">
+            <span>Private by design</span>
+            <span>Memory with consent</span>
+            <span>Gentle guidance</span>
+          </div>
         </div>
 
-        <div className="status-card">
-          <span>Status</span>
-          <strong>{isAuthenticated ? "Authenticated" : "Not signed in"}</strong>
-          <small>{userLabel}</small>
+        <div className="companion-card">
+          <div className="companion-avatar">
+            <span>A</span>
+          </div>
+          <div>
+            <span className="soft-label">Current space</span>
+            <strong>{isAuthenticated ? "Akon is with you" : "Begin when ready"}</strong>
+            <small>{userLabel}</small>
+          </div>
         </div>
       </section>
 
@@ -255,9 +271,12 @@ function App() {
       {!isAuthenticated ? (
         <section className="auth-layout">
           <form className="card auth-card" onSubmit={handleAuthSubmit}>
-            <div className="card-header">
-              <p className="eyebrow">Auth</p>
-              <h2>{authMode === "login" ? "Login" : "Create account"}</h2>
+            <div className="card-header centered">
+              <p className="eyebrow">Your space</p>
+              <h2>{authMode === "login" ? "Welcome back" : "Create your Akon space"}</h2>
+              <p>
+                Sign in to continue your conversations, memories, and companion history.
+              </p>
             </div>
 
             <label>
@@ -293,10 +312,10 @@ function App() {
 
             <button disabled={isLoading} type="submit">
               {isLoading
-                ? "Working..."
+                ? "Preparing..."
                 : authMode === "login"
-                  ? "Login"
-                  : "Register and login"}
+                  ? "Enter Akon"
+                  : "Create space and enter"}
             </button>
 
             <button
@@ -306,7 +325,9 @@ function App() {
                 setAuthMode((current) => (current === "login" ? "register" : "login"))
               }
             >
-              Switch to {authMode === "login" ? "register" : "login"}
+              {authMode === "login"
+                ? "I need to create an account"
+                : "I already have an account"}
             </button>
           </form>
         </section>
@@ -315,25 +336,29 @@ function App() {
           <section className="card chat-card">
             <div className="card-header horizontal">
               <div>
-                <p className="eyebrow">Chat</p>
-                <h2>Akon conversation</h2>
+                <p className="eyebrow">Conversation</p>
+                <h2>Talk with Akon</h2>
+                <p>Say what is true. Akon will help you slow it down and sort it out.</p>
               </div>
               <button className="ghost-button" type="button" onClick={handleLogout}>
-                Logout
+                Leave space
               </button>
             </div>
 
             <div className="message-list">
               {messages.length === 0 ? (
-                <p className="empty-state">
-                  Start a conversation. Akon will respond through the real backend.
-                </p>
+                <div className="empty-conversation">
+                  <div className="pulse-dot" />
+                  <p>
+                    Start with what is on your mind. You do not need to explain it perfectly.
+                  </p>
+                </div>
               ) : (
                 messages.map((message, index) => (
                   <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
                     <strong>{message.role === "user" ? "You" : "Akon"}</strong>
                     <p>{message.content}</p>
-                    {message.safetyLevel && <small>Safety: {message.safetyLevel}</small>}
+                    {message.safetyLevel && <small>Care level: {message.safetyLevel}</small>}
                   </article>
                 ))
               )}
@@ -352,9 +377,9 @@ function App() {
 
             {memoryCandidates.length > 0 && (
               <div className="candidate-box">
-                <h3>Memory candidates</h3>
+                <h3>Akon noticed something it could remember</h3>
                 {memoryCandidates.map((candidate, index) => (
-                  <div className="mini-item" key={`${candidate.memory_type}-${index}`}>
+                  <div className="mini-item warm" key={`${candidate.memory_type}-${index}`}>
                     <strong>{candidate.memory_type}</strong>
                     <p>{candidate.content}</p>
                     <small>{candidate.reason}</small>
@@ -365,15 +390,16 @@ function App() {
           </section>
 
           <aside className="side-stack">
-            <section className="card">
+            <section className="card glow-card">
               <div className="card-header">
-                <p className="eyebrow">Memory</p>
-                <h2>Save memory</h2>
+                <p className="eyebrow">Understanding</p>
+                <h2>What Akon knows</h2>
+                <p>Save only what you want Akon to remember.</p>
               </div>
 
               <form className="stack-form" onSubmit={handleCreateMemory}>
                 <label>
-                  Type
+                  Kind of understanding
                   <select
                     value={memoryType}
                     onChange={(event) => setMemoryType(event.target.value)}
@@ -387,41 +413,45 @@ function App() {
                 </label>
 
                 <label>
-                  Content
+                  What should Akon remember?
                   <textarea
                     value={memoryContent}
-                    placeholder="Example: User prefers direct, step-by-step guidance."
+                    placeholder="Example: I prefer direct, step-by-step guidance when I feel stuck."
                     onChange={(event) => setMemoryContent(event.target.value)}
                   />
                 </label>
 
                 <button disabled={isLoading || !memoryContent.trim()} type="submit">
-                  Save memory
+                  Save understanding
                 </button>
               </form>
 
               <div className="scroll-list">
-                {memories.map((memory) => (
-                  <div className="mini-item" key={memory.id}>
-                    <strong>{memory.memory_type}</strong>
-                    <p>{memory.content}</p>
-                    <small>
-                      {memory.confidence} · {memory.sensitivity} · {memory.consent_state}
-                    </small>
-                  </div>
-                ))}
+                {memories.length === 0 ? (
+                  <p className="empty-state">No saved understanding yet.</p>
+                ) : (
+                  memories.map((memory) => (
+                    <div className="mini-item" key={memory.id}>
+                      <strong>{memory.memory_type}</strong>
+                      <p>{memory.content}</p>
+                      <small>
+                        {memory.confidence} · {memory.sensitivity} · {memory.consent_state}
+                      </small>
+                    </div>
+                  ))
+                )}
               </div>
             </section>
 
             <section className="card">
               <div className="card-header">
-                <p className="eyebrow">Conversations</p>
-                <h2>Recent</h2>
+                <p className="eyebrow">Journey</p>
+                <h2>Recent conversations</h2>
               </div>
 
               <div className="scroll-list">
                 {conversations.length === 0 ? (
-                  <p className="empty-state">No conversations yet.</p>
+                  <p className="empty-state">Your conversation journey starts here.</p>
                 ) : (
                   conversations.map((conversation) => (
                     <button
@@ -431,7 +461,7 @@ function App() {
                       onClick={() => setActiveConversationId(conversation.id)}
                     >
                       <strong>{conversation.title || "Untitled conversation"}</strong>
-                      <small>{conversation.safety_level || "No safety level"}</small>
+                      <small>{conversation.safety_level || "No care level"}</small>
                     </button>
                   ))
                 )}
@@ -440,13 +470,13 @@ function App() {
 
             <section className="card">
               <div className="card-header">
-                <p className="eyebrow">Audit</p>
-                <h2>Latest events</h2>
+                <p className="eyebrow">Trust trail</p>
+                <h2>Recent activity</h2>
               </div>
 
               <div className="scroll-list">
                 {auditLogs.length === 0 ? (
-                  <p className="empty-state">No audit logs yet.</p>
+                  <p className="empty-state">No activity yet.</p>
                 ) : (
                   auditLogs.slice(0, 10).map((auditLog) => (
                     <div className="mini-item" key={auditLog.id}>
