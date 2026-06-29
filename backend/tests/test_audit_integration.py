@@ -45,7 +45,7 @@ def test_chat_message_creates_audit_log() -> None:
     assert audit_log["actor_user_id"] is not None
     assert audit_log["risk_level"] == "medium"
     assert audit_log["details"]["safety_level"] == "S1"
-    assert audit_log["details"]["detected_emotion"] == "anxiety"
+    assert audit_log["details"]["detected_emotion"] == "overwhelmed"
     assert audit_log["details"]["memory_candidate_count"] >= 0
     assert "message_length" in audit_log["details"]
     assert "user_message_id" in audit_log["details"]

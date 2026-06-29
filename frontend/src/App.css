@@ -530,6 +530,13 @@ h3 {
   color: rgba(59, 35, 25, 0.68);
 }
 
+.message-emotion {
+  border: 1px solid rgba(217, 111, 67, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 247, 237, 0.66);
+  padding: 0.32rem 0.58rem;
+}
+
 .message.user {
   align-self: flex-end;
   border-bottom-right-radius: 8px;

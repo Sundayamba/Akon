@@ -109,7 +109,7 @@ def test_no_candidate_for_crisis_message() -> None:
         safety_result={
             "level": "S4",
             "reason": "Possible self-harm or suicide risk detected.",
-            "detected_emotion": "crisis",
+            "detected_emotion": "overwhelmed",
         },
     )
 

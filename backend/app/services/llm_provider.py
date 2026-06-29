@@ -37,14 +37,14 @@ class MockLLMProvider(BaseLLMProvider):
                 "\n\nI’m also taking into account what you’ve asked me to remember."
             )
 
-        if detected_emotion == "frustration":
+        if detected_emotion == "angry":
             return (
                 "I hear the frustration. Let’s cut the noise and deal with the next useful step. "
                 "Tell me exactly what failed, what you expected to happen, and what actually happened."
                 f"{memory_note}"
             )
 
-        if detected_emotion == "anxiety":
+        if detected_emotion in {"anxious", "overwhelmed", "stressed"}:
             return (
                 "It sounds like your mind is carrying too much at once. "
                 "Let’s slow it down and choose one small step. "
@@ -52,7 +52,7 @@ class MockLLMProvider(BaseLLMProvider):
                 f"{memory_note}"
             )
 
-        if detected_emotion == "sadness":
+        if detected_emotion in {"sad", "lonely"}:
             return (
                 "That sounds painful, and I won’t pretend it is small. "
                 "But we can separate what hurts from what you can do next. "
@@ -60,10 +60,17 @@ class MockLLMProvider(BaseLLMProvider):
                 f"{memory_note}"
             )
 
-        if detected_emotion == "excitement":
+        if detected_emotion == "confused":
             return (
-                "Good. That energy is useful. Let’s turn it into execution before it fades. "
-                "What exactly are we building, deciding, or doing next?"
+                "That sounds unclear from the inside. Let's untangle it gently. "
+                "What is the part that feels most confusing right now?"
+                f"{memory_note}"
+            )
+
+        if detected_emotion in {"hopeful", "calm"}:
+            return (
+                "There is something steady in that. Let's use it carefully. "
+                "What would feel like the next honest step from here?"
                 f"{memory_note}"
             )
 

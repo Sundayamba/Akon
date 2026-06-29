@@ -5,27 +5,28 @@ def test_normal_message_returns_s0() -> None:
     result = classify_safety("Hello Akon, I need help planning my day.")
 
     assert result["level"] == "S0"
-    assert result["detected_emotion"] is None
+    assert result["detected_emotion"] == "neutral"
 
 
-def test_anxiety_message_returns_s1() -> None:
+def test_overwhelmed_message_returns_s1() -> None:
     result = classify_safety("I feel overwhelmed and worried about everything.")
 
     assert result["level"] == "S1"
-    assert result["detected_emotion"] == "anxiety"
+    assert result["detected_emotion"] == "overwhelmed"
 
 
-def test_frustration_message_returns_s1() -> None:
+def test_angry_message_returns_s1() -> None:
     result = classify_safety("I am frustrated because this is not working.")
 
     assert result["level"] == "S1"
-    assert result["detected_emotion"] == "frustration"
+    assert result["detected_emotion"] == "angry"
 
 
 def test_high_distress_returns_s3() -> None:
     result = classify_safety("I feel hopeless and everything is falling apart.")
 
     assert result["level"] == "S3"
+    assert result["detected_emotion"] == "overwhelmed"
 
 
 def test_self_harm_returns_s4() -> None:

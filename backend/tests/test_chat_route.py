@@ -41,7 +41,7 @@ def test_chat_message_returns_reply() -> None:
 
     assert "reply" in data
     assert data["safety_level"] == "S1"
-    assert data["detected_emotion"] == "anxiety"
+    assert data["detected_emotion"] == "overwhelmed"
     assert "conversation_id" in data
     assert "memory_candidates" in data
     assert isinstance(data["memory_candidates"], list)
@@ -119,10 +119,11 @@ def test_get_conversation_returns_messages() -> None:
     create_response = client.post(
         "/chat/message",
         headers=headers,
-        json={"message": "I am excited about building Akon."},
+        json={"message": "I am hopeful things will get better."},
     )
 
     assert create_response.status_code == 200
+    assert create_response.json()["detected_emotion"] == "hopeful"
 
     conversation_id = create_response.json()["conversation_id"]
 
@@ -143,6 +144,7 @@ def test_get_conversation_returns_messages() -> None:
 
     assert "user" in roles
     assert "assistant" in roles
+    assert all(message["detected_emotion"] == "hopeful" for message in data["messages"])
 
 
 def test_get_unknown_conversation_returns_404() -> None:

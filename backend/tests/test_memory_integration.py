@@ -38,7 +38,7 @@ def test_saved_memory_influences_chat_reply() -> None:
     data = chat_response.json()
 
     assert data["safety_level"] == "S1"
-    assert data["detected_emotion"] == "anxiety"
+    assert data["detected_emotion"] == "overwhelmed"
     assert "reply" in data
     assert "conversation_id" in data
     assert "memory_candidates" in data

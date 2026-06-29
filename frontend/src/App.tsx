@@ -38,6 +38,7 @@ type ChatMessage = {
   content: string;
   createdAt: string;
   safetyLevel?: string | null;
+  detectedEmotion?: string | null;
 };
 
 type MemoryEditState = {
@@ -117,6 +118,7 @@ function mapConversationToMessages(
     content: message.content,
     createdAt: message.created_at,
     safetyLevel: message.safety_level,
+    detectedEmotion: message.detected_emotion,
   }));
 }
 
@@ -452,6 +454,7 @@ function App() {
           content: response.reply,
           createdAt: new Date().toISOString(),
           safetyLevel: response.safety_level,
+          detectedEmotion: response.detected_emotion,
         },
       ]);
 
@@ -648,7 +651,7 @@ function App() {
 
       <section className="hero-panel">
         <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.2.9</p>
+          <p className="eyebrow">Akon companion preview · v0.3.0</p>
           <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
             Akon is being shaped as a supportive AI companion that remembers with
@@ -804,6 +807,11 @@ function App() {
                         <span>Care level: {message.safetyLevel}</span>
                       )}
                     </div>
+                    {message.role === "assistant" && message.detectedEmotion && (
+                      <small className="message-emotion">
+                        Akon sensed: {message.detectedEmotion}
+                      </small>
+                    )}
                   </article>
                 ))
               )}
