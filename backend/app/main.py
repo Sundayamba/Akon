@@ -16,7 +16,7 @@ from app.api.routes.memory import router as memory_router
 from app.core.config import settings
 
 
-API_VERSION = "0.2.3"
+API_VERSION = "0.3.3"
 
 
 @asynccontextmanager

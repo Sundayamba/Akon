@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import API_VERSION, app
 from tests.helpers import auth_headers
 
 
@@ -16,7 +16,7 @@ def test_root_returns_api_metadata() -> None:
 
     assert data["service"] == "akon-api"
     assert data["name"] == "Akon"
-    assert data["version"] == "0.2.3"
+    assert data["version"] == API_VERSION
     assert data["environment"] == "development"
     assert data["status"] == "ok"
 
@@ -29,7 +29,7 @@ def test_version_returns_version_metadata() -> None:
     data = response.json()
 
     assert data["service"] == "akon-api"
-    assert data["version"] == "0.2.3"
+    assert data["version"] == API_VERSION
     assert data["environment"] == "development"
 
 

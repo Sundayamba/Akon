@@ -50,13 +50,26 @@ export type GroundingToolItem = {
   instruction: string;
 };
 
+export type FeedbackRating = "helpful" | "not_helpful";
+
 export type ChatResponse = {
   reply: string;
   safety_level: string;
   detected_emotion: string | null;
   grounding_tool: GroundingToolItem | null;
   conversation_id: string;
+  assistant_message_id: string;
   memory_candidates: MemoryCandidateItem[];
+};
+
+export type MessageFeedbackResponse = {
+  id: string;
+  message_id: string;
+  conversation_id: string;
+  rating: FeedbackRating;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ConversationSummary = {
@@ -74,6 +87,7 @@ export type MessageItem = {
   content: string;
   safety_level: string | null;
   detected_emotion: string | null;
+  feedback_rating: FeedbackRating | null;
   created_at: string;
 };
 

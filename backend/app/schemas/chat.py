@@ -1,6 +1,10 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+FeedbackRating = Literal["helpful", "not_helpful"]
 
 
 class MemoryCandidateItem(BaseModel):
@@ -62,6 +66,10 @@ class ChatMessageResponse(BaseModel):
         ...,
         description="Conversation ID used for the exchange.",
     )
+    assistant_message_id: str = Field(
+        ...,
+        description="Message ID for Akon's reply. Used for optional quality feedback.",
+    )
     memory_candidates: list[MemoryCandidateItem] = Field(
         default_factory=list,
         description="Possible memories detected from the message. These are not saved until user confirms.",
@@ -74,6 +82,7 @@ class MessageItem(BaseModel):
     content: str
     safety_level: str | None = None
     detected_emotion: str | None = None
+    feedback_rating: str | None = None
     created_at: datetime
 
 
@@ -94,3 +103,25 @@ class ConversationDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     messages: list[MessageItem]
+
+
+class MessageFeedbackRequest(BaseModel):
+    rating: FeedbackRating = Field(
+        ...,
+        description="Whether Akon's reply felt helpful or not helpful.",
+    )
+    note: str | None = Field(
+        default=None,
+        max_length=1000,
+        description="Optional short note explaining the feedback.",
+    )
+
+
+class MessageFeedbackResponse(BaseModel):
+    id: str
+    message_id: str
+    conversation_id: str
+    rating: str
+    note: str | None = None
+    created_at: datetime
+    updated_at: datetime

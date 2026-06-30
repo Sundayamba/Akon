@@ -568,6 +568,47 @@ h3 {
   line-height: 1.6;
 }
 
+.message-quality {
+  display: grid;
+  gap: 0.55rem;
+  border-top: 1px solid rgba(116, 78, 54, 0.1);
+  margin-top: 0.85rem;
+  padding-top: 0.8rem;
+}
+
+.message-quality > span {
+  color: #967063;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.quality-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.quality-button {
+  border: 1px solid rgba(116, 78, 54, 0.14);
+  background: rgba(255, 255, 255, 0.62);
+  color: #684433;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 0.5rem 0.72rem;
+  box-shadow: none;
+}
+
+.quality-button:hover {
+  box-shadow: 0 10px 22px rgba(123, 73, 42, 0.08);
+}
+
+.quality-button.selected {
+  border-color: rgba(255, 138, 91, 0.32);
+  background: rgba(255, 244, 230, 0.9);
+  color: #8a4e34;
+  box-shadow: 0 10px 26px rgba(255, 138, 91, 0.12);
+}
+
 .message.user {
   align-self: flex-end;
   border-bottom-right-radius: 8px;
@@ -768,7 +809,8 @@ h3 {
 
   .header-actions button,
   .candidate-actions button,
-  .memory-actions button {
+  .memory-actions button,
+  .quality-actions button {
     width: 100%;
   }
 }

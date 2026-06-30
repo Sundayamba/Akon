@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.models.conversation import Conversation, Message
+from app.models.conversation import Conversation, Message, MessageFeedback
 from app.models.user import User
 from app.schemas.chat import (
     ChatMessageRequest,
@@ -14,6 +14,8 @@ from app.schemas.chat import (
     ConversationSummary,
     GroundingToolItem,
     MemoryCandidateItem,
+    MessageFeedbackRequest,
+    MessageFeedbackResponse,
     MessageItem,
 )
 from app.services.akon_engine import generate_akon_reply
@@ -81,6 +83,26 @@ def _build_grounding_tool_response(
         name=tool["name"],
         instruction=tool["instruction"],
     )
+
+
+def _get_user_message_feedback(
+    db: Session,
+    user_id: str,
+    message_ids: list[str],
+) -> dict[str, str]:
+    if not message_ids:
+        return {}
+
+    feedback_items = db.scalars(
+        select(MessageFeedback)
+        .where(MessageFeedback.user_id == user_id)
+        .where(MessageFeedback.message_id.in_(message_ids))
+    ).all()
+
+    return {
+        feedback.message_id: feedback.rating
+        for feedback in feedback_items
+    }
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -193,6 +215,7 @@ def send_chat_message(
 
     db.commit()
     db.refresh(conversation)
+    db.refresh(assistant_message)
 
     return ChatMessageResponse(
         reply=reply,
@@ -200,7 +223,88 @@ def send_chat_message(
         detected_emotion=detected_emotion,
         grounding_tool=grounding_tool,
         conversation_id=conversation.id,
+        assistant_message_id=assistant_message.id,
         memory_candidates=memory_candidates,
+    )
+
+
+@router.post(
+    "/messages/{message_id}/feedback",
+    response_model=MessageFeedbackResponse,
+)
+def submit_message_feedback(
+    message_id: str,
+    payload: MessageFeedbackRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MessageFeedbackResponse:
+    message = db.get(Message, message_id)
+
+    if message is None or message.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found.",
+        )
+
+    if message.role != "assistant":
+        raise HTTPException(
+            status_code=400,
+            detail="Feedback can only be submitted for Akon's replies.",
+        )
+
+    existing_feedback = db.scalar(
+        select(MessageFeedback)
+        .where(MessageFeedback.message_id == message.id)
+        .where(MessageFeedback.user_id == current_user.id)
+    )
+
+    note = payload.note.strip() if payload.note else None
+
+    if existing_feedback is None:
+        feedback = MessageFeedback(
+            message_id=message.id,
+            conversation_id=message.conversation_id,
+            user_id=current_user.id,
+            rating=payload.rating,
+            note=note,
+        )
+        db.add(feedback)
+        audit_action = "message.feedback.created"
+    else:
+        feedback = existing_feedback
+        feedback.rating = payload.rating
+        feedback.note = note
+        audit_action = "message.feedback.updated"
+
+    db.flush()
+
+    create_audit_log(
+        db,
+        action=audit_action,
+        entity_type="message_feedback",
+        entity_id=feedback.id,
+        actor_user_id=current_user.id,
+        risk_level="low",
+        source="chat_route",
+        details={
+            "message_id": message.id,
+            "conversation_id": message.conversation_id,
+            "rating": feedback.rating,
+            "has_note": bool(feedback.note),
+        },
+    )
+
+    db.commit()
+    db.refresh(feedback)
+
+    return MessageFeedbackResponse(
+        id=feedback.id,
+        message_id=feedback.message_id,
+        conversation_id=feedback.conversation_id,
+        rating=feedback.rating,
+        note=feedback.note,
+        created_at=feedback.created_at,
+        updated_at=feedback.updated_at,
     )
 
 
@@ -253,6 +357,12 @@ def get_conversation(
         .order_by(Message.created_at.asc())
     ).all()
 
+    feedback_by_message_id = _get_user_message_feedback(
+        db=db,
+        user_id=current_user.id,
+        message_ids=[message.id for message in messages],
+    )
+
     return ConversationDetailResponse(
         id=conversation.id,
         title=conversation.title,
@@ -267,6 +377,7 @@ def get_conversation(
                 content=message.content,
                 safety_level=message.safety_level,
                 detected_emotion=message.detected_emotion,
+                feedback_rating=feedback_by_message_id.get(message.id),
                 created_at=message.created_at,
             )
             for message in messages

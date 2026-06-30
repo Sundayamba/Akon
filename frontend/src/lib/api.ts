@@ -7,6 +7,7 @@ import type {
   ConversationSummary,
   MemoryCandidateItem,
   MemoryItem,
+  MessageFeedbackResponse,
   TokenResponse,
 } from "../types";
 
@@ -162,6 +163,22 @@ export async function sendChatMessage(
     body: {
       message,
       conversation_id: conversationId || null,
+    },
+  });
+}
+
+export async function submitMessageFeedback(
+  token: string,
+  messageId: string,
+  rating: "helpful" | "not_helpful",
+  note?: string,
+): Promise<MessageFeedbackResponse> {
+  return apiRequest<MessageFeedbackResponse>(`/chat/messages/${messageId}/feedback`, {
+    method: "POST",
+    token,
+    body: {
+      rating,
+      note: note?.trim() || null,
     },
   });
 }
