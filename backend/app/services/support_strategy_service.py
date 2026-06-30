@@ -53,6 +53,73 @@ EMOTION_STRATEGIES: dict[str, dict[str, str]] = {
     },
 }
 
+GROUNDING_TOOLS: dict[str, dict[str, str]] = {
+    "overwhelmed": {
+        "name": "One-thing anchor",
+        "instruction": "Pause for ten seconds, place both feet on the floor, and choose only one thing to handle next.",
+    },
+    "stressed": {
+        "name": "Pressure drop",
+        "instruction": "Unclench your jaw, lower your shoulders, breathe out slowly, then name the smallest useful next action.",
+    },
+    "anxious": {
+        "name": "Known / unknown / next",
+        "instruction": "Write three short lines: what I know, what I do not know yet, and the next safe thing I can do.",
+    },
+    "angry": {
+        "name": "Heat to boundary",
+        "instruction": "Take one slow breath before acting, then name the boundary, need, or value that feels crossed.",
+    },
+    "confused": {
+        "name": "Three-option sort",
+        "instruction": "List up to three options, cross out what is unrealistic today, and choose the smallest remaining step.",
+    },
+    "sad": {
+        "name": "Gentle naming",
+        "instruction": "Put one hand on your chest if that feels okay, breathe slowly, and name the hardest part in one sentence.",
+    },
+    "lonely": {
+        "name": "Connection thread",
+        "instruction": "Think of one safe person, place, or routine that could make you feel a little less alone today.",
+    },
+    "hopeful": {
+        "name": "Protect the spark",
+        "instruction": "Name one small action that supports this hope without putting too much pressure on yourself.",
+    },
+    "calm": {
+        "name": "Steady hour",
+        "instruction": "Notice what is helping you feel steady, then choose one simple thing that protects that calm for the next hour.",
+    },
+    "neutral": {
+        "name": "Next useful thing",
+        "instruction": "Take a slow breath and choose the one topic, task, or feeling that would be most useful to sort out first.",
+    },
+}
+
+
+def normalize_emotion(detected_emotion: str | None) -> str:
+    if not detected_emotion:
+        return "neutral"
+
+    emotion = detected_emotion.strip().lower()
+    return emotion if emotion in EMOTION_STRATEGIES else "neutral"
+
+
+def get_grounding_tool(detected_emotion: str | None) -> dict[str, str]:
+    """
+    Return a deterministic, non-clinical grounding tool for the detected emotion.
+
+    These tools are not medical treatment or diagnosis. They are lightweight
+    support prompts for ordinary stressful, confusing, or emotionally heavy moments.
+    """
+    emotion = normalize_emotion(detected_emotion)
+    return GROUNDING_TOOLS.get(emotion, GROUNDING_TOOLS["neutral"])
+
+
+def build_grounding_line(detected_emotion: str | None) -> str:
+    tool = get_grounding_tool(detected_emotion)
+    return f"Grounding tool — {tool['name']}: {tool['instruction']}"
+
 
 def build_support_reply(
     user_message: str,
@@ -66,11 +133,11 @@ def build_support_reply(
     This is for ordinary supportive exchanges only. Higher-risk safety flows
     should keep using their dedicated safety responses.
     """
-    emotion = detected_emotion or "neutral"
-    strategy = EMOTION_STRATEGIES.get(emotion, EMOTION_STRATEGIES["neutral"])
-
     if safety_level not in SUPPORTIVE_SAFETY_LEVELS:
         raise ValueError("Support strategy is only for normal supportive safety levels.")
+
+    emotion = normalize_emotion(detected_emotion)
+    strategy = EMOTION_STRATEGIES[emotion]
 
     closing = "I am here with you as we sort it out."
 

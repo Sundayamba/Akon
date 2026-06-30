@@ -13,6 +13,17 @@ class MemoryCandidateItem(BaseModel):
     reason: str
 
 
+class GroundingToolItem(BaseModel):
+    name: str = Field(
+        ...,
+        description="Short name for the grounding support tool.",
+    )
+    instruction: str = Field(
+        ...,
+        description="Brief non-clinical grounding instruction.",
+    )
+
+
 class ChatMessageRequest(BaseModel):
     message: str = Field(
         ...,
@@ -42,6 +53,10 @@ class ChatMessageResponse(BaseModel):
     detected_emotion: str | None = Field(
         default=None,
         description="Detected emotional signal, if any.",
+    )
+    grounding_tool: GroundingToolItem | None = Field(
+        default=None,
+        description="Optional lightweight grounding tool for stressful or emotionally heavy moments.",
     )
     conversation_id: str = Field(
         ...,

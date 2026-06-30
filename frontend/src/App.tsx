@@ -33,12 +33,18 @@ import type {
 
 type AuthMode = "login" | "register";
 
+type GroundingTool = {
+  name: string;
+  instruction: string;
+};
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
   safetyLevel?: string | null;
   detectedEmotion?: string | null;
+  groundingTool?: GroundingTool | null;
 };
 
 type MemoryEditState = {
@@ -75,6 +81,14 @@ function formatErrorMessage(error: unknown): string {
   }
 
   return "Something went wrong.";
+}
+
+function extractGroundingTool(response: ChatResponse): GroundingTool | null {
+  const responseWithGrounding = response as ChatResponse & {
+    grounding_tool?: GroundingTool | null;
+  };
+
+  return responseWithGrounding.grounding_tool ?? null;
 }
 
 function isSameDay(firstDate: Date, secondDate: Date): boolean {
@@ -119,6 +133,7 @@ function mapConversationToMessages(
     createdAt: message.created_at,
     safetyLevel: message.safety_level,
     detectedEmotion: message.detected_emotion,
+    groundingTool: null,
   }));
 }
 
@@ -455,6 +470,7 @@ function App() {
           createdAt: new Date().toISOString(),
           safetyLevel: response.safety_level,
           detectedEmotion: response.detected_emotion,
+          groundingTool: extractGroundingTool(response),
         },
       ]);
 
@@ -651,7 +667,7 @@ function App() {
 
       <section className="hero-panel">
         <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.3.1</p>
+          <p className="eyebrow">Akon companion preview · v0.3.2</p>
           <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
             Akon is being shaped as a supportive AI companion that remembers with
@@ -662,7 +678,7 @@ function App() {
           <div className="hero-pills">
             <span>Private by design</span>
             <span>Memory with consent</span>
-            <span>Gentle guidance</span>
+            <span>Gentle grounding tools</span>
           </div>
         </div>
 
@@ -811,6 +827,13 @@ function App() {
                       <small className="message-emotion">
                         Akon sensed: {message.detectedEmotion}
                       </small>
+                    )}
+                    {message.role === "assistant" && message.groundingTool && (
+                      <div className="message-grounding">
+                        <span>Grounding tool</span>
+                        <strong>{message.groundingTool.name}</strong>
+                        <p>{message.groundingTool.instruction}</p>
+                      </div>
                     )}
                   </article>
                 ))

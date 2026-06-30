@@ -12,6 +12,7 @@ from app.schemas.chat import (
     ChatMessageResponse,
     ConversationDetailResponse,
     ConversationSummary,
+    GroundingToolItem,
     MemoryCandidateItem,
     MessageItem,
 )
@@ -21,8 +22,19 @@ from app.services.auth_service import get_current_user
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
 from app.services.safety_service import classify_safety
+from app.services.support_strategy_service import get_grounding_tool
 
 router = APIRouter()
+
+GROUNDING_EMOTIONS = {
+    "overwhelmed",
+    "stressed",
+    "anxious",
+    "angry",
+    "confused",
+    "sad",
+    "lonely",
+}
 
 
 def _create_conversation_title(message: str) -> str:
@@ -45,6 +57,30 @@ def _audit_risk_from_safety_level(safety_level: str) -> str:
         return "medium"
 
     return "low"
+
+
+def _build_grounding_tool_response(
+    safety_level: str,
+    detected_emotion: str | None,
+) -> GroundingToolItem | None:
+    """
+    Return a lightweight grounding tool for ordinary emotional support moments.
+
+    S4 crisis flow remains dedicated to urgent safety guidance and should not be
+    mixed with general grounding UX.
+    """
+    if safety_level == "S4":
+        return None
+
+    if detected_emotion not in GROUNDING_EMOTIONS:
+        return None
+
+    tool = get_grounding_tool(detected_emotion)
+
+    return GroundingToolItem(
+        name=tool["name"],
+        instruction=tool["instruction"],
+    )
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -74,6 +110,8 @@ def send_chat_message(
         db.flush()
 
     safety_result = classify_safety(payload.message)
+    safety_level = safety_result["level"]
+    detected_emotion = safety_result.get("detected_emotion")
 
     memory_context = retrieve_memory_context(
         db=db,
@@ -85,6 +123,11 @@ def send_chat_message(
         message=payload.message,
         safety_result=safety_result,
         memory_context=memory_context,
+    )
+
+    grounding_tool = _build_grounding_tool_response(
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
     )
 
     memory_candidates_raw = extract_memory_candidates(
@@ -105,15 +148,15 @@ def send_chat_message(
         for candidate in memory_candidates_raw
     ]
 
-    conversation.safety_level = safety_result["level"]
+    conversation.safety_level = safety_level
 
     user_message = Message(
         conversation_id=conversation.id,
         user_id=current_user.id,
         role="user",
         content=payload.message,
-        safety_level=safety_result["level"],
-        detected_emotion=safety_result.get("detected_emotion"),
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
     )
 
     assistant_message = Message(
@@ -121,8 +164,8 @@ def send_chat_message(
         user_id=current_user.id,
         role="assistant",
         content=reply,
-        safety_level=safety_result["level"],
-        detected_emotion=safety_result.get("detected_emotion"),
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
     )
 
     db.add(user_message)
@@ -135,11 +178,12 @@ def send_chat_message(
         entity_type="conversation",
         entity_id=conversation.id,
         actor_user_id=current_user.id,
-        risk_level=_audit_risk_from_safety_level(safety_result["level"]),
+        risk_level=_audit_risk_from_safety_level(safety_level),
         source="chat_route",
         details={
-            "safety_level": safety_result["level"],
-            "detected_emotion": safety_result.get("detected_emotion"),
+            "safety_level": safety_level,
+            "detected_emotion": detected_emotion,
+            "grounding_tool": grounding_tool.name if grounding_tool else None,
             "memory_candidate_count": len(memory_candidates),
             "user_message_id": user_message.id,
             "assistant_message_id": assistant_message.id,
@@ -152,8 +196,9 @@ def send_chat_message(
 
     return ChatMessageResponse(
         reply=reply,
-        safety_level=safety_result["level"],
-        detected_emotion=safety_result.get("detected_emotion"),
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
+        grounding_tool=grounding_tool,
         conversation_id=conversation.id,
         memory_candidates=memory_candidates,
     )

@@ -45,10 +45,16 @@ export type MemoryCandidateItem = {
   reason: string;
 };
 
+export type GroundingToolItem = {
+  name: string;
+  instruction: string;
+};
+
 export type ChatResponse = {
   reply: string;
   safety_level: string;
   detected_emotion: string | null;
+  grounding_tool: GroundingToolItem | null;
   conversation_id: string;
   memory_candidates: MemoryCandidateItem[];
 };

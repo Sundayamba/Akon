@@ -1,7 +1,7 @@
 from typing import Any
 
 from app.services.llm_provider import LLMProviderError, get_llm_provider
-from app.services.support_strategy_service import build_support_reply
+from app.services.support_strategy_service import build_grounding_line, build_support_reply
 
 
 def _crisis_reply() -> str:
@@ -17,10 +17,13 @@ def _crisis_reply() -> str:
     )
 
 
-def _high_distress_reply() -> str:
+def _high_distress_reply(detected_emotion: str | None = None) -> str:
+    grounding_line = build_grounding_line(detected_emotion)
+
     return (
         "That sounds heavy, and I don't want to rush past it. "
         "Let's slow it down. You do not need to solve everything at once.\n\n"
+        f"{grounding_line}\n\n"
         "For the next minute, focus only on this: breathe slowly, sit somewhere safe, "
         "and name the one thing that feels most urgent right now. "
         "What is the biggest pressure on you at this moment?"
@@ -59,7 +62,7 @@ def generate_akon_reply(
         return _crisis_reply()
 
     if safety_level == "S3":
-        return _high_distress_reply()
+        return _high_distress_reply(detected_emotion=detected_emotion)
 
     try:
         provider = get_llm_provider()

@@ -537,6 +537,37 @@ h3 {
   padding: 0.32rem 0.58rem;
 }
 
+.message-grounding {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(217, 111, 67, 0.16);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 209, 102, 0.18), transparent 9rem),
+    rgba(255, 247, 237, 0.78);
+  margin-top: 0.8rem;
+  padding: 0.85rem;
+}
+
+.message-grounding span {
+  color: #d96f43;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.message-grounding strong {
+  color: #4a3025;
+  font-size: 0.98rem;
+}
+
+.message-grounding p {
+  color: #76574a;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
 .message.user {
   align-self: flex-end;
   border-bottom-right-radius: 8px;
