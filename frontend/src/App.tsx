@@ -8,9 +8,11 @@ import {
   confirmMemoryCandidate,
   createMemory,
   deleteMemory,
+  getApiErrorMessage,
   getConversation,
   getCurrentUser,
   getStoredAccessToken,
+  isAiProviderUnavailableError,
   listAuditLogs,
   listConversations,
   listMemories,
@@ -65,16 +67,24 @@ function clearActiveConversationId(): void {
 }
 
 function formatErrorMessage(error: unknown): string {
-  if (error instanceof ApiRequestError) {
-    const requestIdText = error.requestId ? ` Request ID: ${error.requestId}` : "";
-    return `${error.message}${requestIdText}`;
+  const message = getApiErrorMessage(error);
+
+  if (error instanceof ApiRequestError && error.requestId) {
+    return `${message} Request ID: ${error.requestId}`;
   }
 
-  if (error instanceof Error) {
-    return error.message;
+  return message;
+}
+
+function buildChatFailureMessage(error: unknown): string {
+  if (isAiProviderUnavailableError(error)) {
+    return (
+      "I’m having trouble reaching my AI provider right now. " +
+      "Your message was not saved, so you can try again shortly without losing the thread."
+    );
   }
 
-  return "Something went wrong.";
+  return formatErrorMessage(error);
 }
 
 function isSameDay(firstDate: Date, secondDate: Date): boolean {
@@ -460,7 +470,21 @@ function App() {
 
       await refreshWorkspace(token);
     } catch (error) {
-      setErrorMessage(formatErrorMessage(error));
+      const chatFailureMessage = buildChatFailureMessage(error);
+
+      if (isAiProviderUnavailableError(error)) {
+        setMessages((current) => [
+          ...current,
+          {
+            role: "assistant",
+            content: chatFailureMessage,
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+        setStatusMessage("Akon could not complete that reply. Please try again shortly.");
+      } else {
+        setErrorMessage(chatFailureMessage);
+      }
     } finally {
       setIsChatLoading(false);
     }
@@ -651,7 +675,7 @@ function App() {
 
       <section className="hero-panel">
         <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.3.1</p>
+          <p className="eyebrow">Akon companion preview · v0.3.6</p>
           <h1>A calm place to think, feel, and move forward.</h1>
           <p className="hero-copy">
             Akon is being shaped as a supportive AI companion that remembers with
@@ -662,7 +686,7 @@ function App() {
           <div className="hero-pills">
             <span>Private by design</span>
             <span>Memory with consent</span>
-            <span>Gentle guidance</span>
+            <span>Provider-aware UX</span>
           </div>
         </div>
 
@@ -803,7 +827,7 @@ function App() {
                       <time dateTime={message.createdAt}>
                         {formatMessageTimestamp(message.createdAt)}
                       </time>
-                      {message.safetyLevel && (
+                      {message.safetyLevel && message.safetyLevel !== "S0" && (
                         <span>Care level: {message.safetyLevel}</span>
                       )}
                     </div>

@@ -20,11 +20,18 @@ const ACCESS_TOKEN_KEY = "akon_access_token";
 
 export const AUTH_EXPIRED_EVENT = "akon_auth_expired";
 
+export const AI_PROVIDER_UNAVAILABLE_MESSAGE =
+  "Akon is having trouble reaching its AI provider right now. Please try again shortly.";
+
+export const NETWORK_UNAVAILABLE_MESSAGE =
+  "Akon could not connect to the server. Please check your connection and try again.";
+
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
   requestId?: string;
   details?: unknown;
+  isRetryable: boolean;
 
   constructor(params: {
     message: string;
@@ -32,6 +39,7 @@ export class ApiRequestError extends Error {
     code?: string;
     requestId?: string;
     details?: unknown;
+    isRetryable?: boolean;
   }) {
     super(params.message);
     this.name = "ApiRequestError";
@@ -39,7 +47,39 @@ export class ApiRequestError extends Error {
     this.code = params.code;
     this.requestId = params.requestId;
     this.details = params.details;
+    this.isRetryable = params.isRetryable ?? false;
   }
+}
+
+export function isApiRequestError(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError;
+}
+
+export function isAiProviderUnavailableError(error: unknown): boolean {
+  return isApiRequestError(error) && error.status === 503;
+}
+
+export function getApiErrorMessage(
+  error: unknown,
+  fallbackMessage = "Something went wrong. Please try again.",
+): string {
+  if (isAiProviderUnavailableError(error)) {
+    return AI_PROVIDER_UNAVAILABLE_MESSAGE;
+  }
+
+  if (isApiRequestError(error)) {
+    return error.message || fallbackMessage;
+  }
+
+  if (error instanceof TypeError) {
+    return NETWORK_UNAVAILABLE_MESSAGE;
+  }
+
+  if (error instanceof Error) {
+    return error.message || fallbackMessage;
+  }
+
+  return fallbackMessage;
 }
 
 export function getStoredAccessToken(): string | null {
@@ -56,6 +96,10 @@ export function clearStoredAccessToken(): void {
 
 function dispatchAuthExpired(): void {
   window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
 async function parseJsonResponse<T>(
@@ -89,6 +133,7 @@ async function parseJsonResponse<T>(
       code: error?.code,
       requestId: error?.request_id,
       details: error?.details,
+      isRetryable: isRetryableStatus(response.status),
     });
   }
 
@@ -117,11 +162,23 @@ export async function apiRequest<T>(
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method || "GET",
-    headers,
-    body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: options.method || "GET",
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    throw new ApiRequestError({
+      message: NETWORK_UNAVAILABLE_MESSAGE,
+      status: 0,
+      code: "network_error",
+      details: error,
+      isRetryable: true,
+    });
+  }
 
   return parseJsonResponse<T>(response, Boolean(options.token));
 }
