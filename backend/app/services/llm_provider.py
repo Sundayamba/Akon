@@ -31,19 +31,20 @@ POSTURE_INSTRUCTIONS: dict[ResponsePosture, str] = {
         "and practical. Do not assume the user is emotionally distressed."
     ),
     "learning": (
-        "Act like a clear tutor. Explain step by step, use simple examples, check for "
-        "understanding when useful, and help the user learn the concept."
+        "Act like a clear tutor. Explain step by step, use simple examples, and help "
+        "the user understand the topic. If the user asks for depth, expand. If not, "
+        "keep it focused."
     ),
     "research": (
         "Act like a research assistant. Organize the answer clearly, separate facts "
-        "from uncertainty, and mention what should be verified when information may be fresh."
+        "from assumptions, and say when fresh verification is needed."
     ),
     "planning": (
         "Act like a practical planner. Give realistic priorities, steps, sequencing, "
-        "and next actions."
+        "constraints, and next actions."
     ),
     "writing": (
-        "Act like a writing assistant. When the user asks for a message, email, caption, "
+        "Act like a writing assistant. If the user asks for a message, email, caption, "
         "letter, speech, announcement, or wording, produce a usable draft immediately "
         "when enough context exists. Do not merely say you can help."
     ),
@@ -53,7 +54,7 @@ POSTURE_INSTRUCTIONS: dict[ResponsePosture, str] = {
     ),
     "decision": (
         "Act like a decision assistant. Compare options, tradeoffs, risks, benefits, "
-        "timing, and give a clear recommendation when possible."
+        "timing, and give a clear recommendation when enough information exists."
     ),
     "casual": (
         "Respond naturally and lightly. Treat the message as normal conversation, not "
@@ -74,8 +75,8 @@ def _fallback_posture_from_message(message: str) -> ResponsePosture:
     """
     Lightweight fallback only.
 
-    The main engine should normally pass response_posture explicitly.
-    This exists so provider tests or direct provider calls still behave reasonably.
+    The Akon engine should normally pass response_posture explicitly. This exists
+    so direct provider calls and tests still behave reasonably.
     """
     normalized = _normalize_message(message)
 
@@ -93,6 +94,9 @@ def _fallback_posture_from_message(message: str) -> ResponsePosture:
             "git",
             "backend",
             "frontend",
+            "api",
+            "database",
+            "sql",
         }
     ):
         return "technical"
@@ -320,6 +324,39 @@ def _build_mock_reply(
     return "I can help with that. Tell me what you want to do, and I’ll respond directly."
 
 
+def _build_openai_input(
+    *,
+    message: str,
+    safety_level: str,
+    detected_emotion: str | None,
+    memory_context: str | None,
+    response_posture: ResponsePosture,
+) -> str:
+    memory_block = memory_context.strip() if memory_context else "<none>"
+    posture_instruction = POSTURE_INSTRUCTIONS[response_posture]
+
+    return (
+        f"Safety level: {safety_level}\n"
+        f"Detected emotion: {detected_emotion or 'none'}\n"
+        f"Internal response posture: {response_posture}\n\n"
+        f"Response guidance:\n{posture_instruction}\n\n"
+        "Important behavior rules:\n"
+        "- Answer the user's actual request directly.\n"
+        "- Do not assume emotional distress by default.\n"
+        "- Use emotional-support language only when response posture is emotional_support "
+        "or when safety requires it.\n"
+        "- If the user asks for a message, email, caption, letter, announcement, or speech, "
+        "produce the draft immediately when enough context exists.\n"
+        "- If the user greets you casually, reply naturally like a normal companion.\n"
+        "- If the user asks for learning, research, planning, technical help, or a decision, "
+        "respond in that useful posture.\n"
+        "- Do not mention saved memory, saved context, or old details unless they are directly "
+        "useful for answering the user's current request.\n\n"
+        f"Relevant saved memory:\n{memory_block}\n\n"
+        f"User message:\n{message}"
+    )
+
+
 class BaseLLMProvider(ABC):
     @abstractmethod
     def generate_reply(
@@ -373,30 +410,17 @@ class OpenAILLMProvider(BaseLLMProvider):
         response_posture: ResponsePosture | None = None,
     ) -> str:
         posture = response_posture or _fallback_posture_from_message(message)
-        memory_block = memory_context or "No relevant saved memory."
-        posture_instruction = POSTURE_INSTRUCTIONS[posture]
 
         try:
             response = self.client.responses.create(
                 model=self.model,
                 instructions=AKON_SYSTEM_PROMPT,
-                input=(
-                    f"Safety level: {safety_level}\n"
-                    f"Detected emotion: {detected_emotion or 'none'}\n"
-                    f"Internal response posture: {posture}\n\n"
-                    f"Response guidance:\n{posture_instruction}\n\n"
-                    "Important behavior rules:\n"
-                    "- Answer the user's actual request directly.\n"
-                    "- Do not assume emotional distress by default.\n"
-                    "- Use emotional-support language only when response posture is emotional_support "
-                    "or when safety requires it.\n"
-                    "- If the user asks for a message, email, caption, letter, announcement, or speech, "
-                    "produce the draft immediately when enough context exists.\n"
-                    "- If the user greets you casually, reply naturally like a normal companion.\n"
-                    "- If the user asks for learning, research, planning, technical help, or a decision, "
-                    "respond in that useful posture.\n\n"
-                    f"Relevant saved memory:\n{memory_block}\n\n"
-                    f"User message:\n{message}"
+                input=_build_openai_input(
+                    message=message,
+                    safety_level=safety_level,
+                    detected_emotion=detected_emotion,
+                    memory_context=memory_context,
+                    response_posture=posture,
                 ),
                 max_output_tokens=settings.openai_max_output_tokens,
             )

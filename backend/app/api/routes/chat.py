@@ -1,6 +1,6 @@
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.schemas.chat import (
 from app.services.akon_engine import generate_akon_reply
 from app.services.audit_service import create_audit_log
 from app.services.auth_service import get_current_user
+from app.services.llm_provider import LLMProviderError
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
 from app.services.reflection_service import build_conversation_reflection
@@ -138,6 +139,16 @@ def _get_owned_conversation_messages(
     )
 
 
+def _raise_ai_unavailable_error() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Akon's AI provider is temporarily unavailable. "
+            "Please try again shortly."
+        ),
+    )
+
+
 @router.post("/message", response_model=ChatMessageResponse)
 def send_chat_message(
     payload: ChatMessageRequest,
@@ -174,11 +185,15 @@ def send_chat_message(
         message=payload.message,
     )
 
-    reply = generate_akon_reply(
-        message=payload.message,
-        safety_result=safety_result,
-        memory_context=memory_context,
-    )
+    try:
+        reply = generate_akon_reply(
+            message=payload.message,
+            safety_result=safety_result,
+            memory_context=memory_context,
+        )
+    except LLMProviderError:
+        db.rollback()
+        _raise_ai_unavailable_error()
 
     grounding_tool = _build_grounding_tool_response(
         safety_level=safety_level,

@@ -488,6 +488,16 @@ def _generate_with_provider(
         )
 
 
+def _should_use_local_fallback() -> bool:
+    """
+    Decide whether provider failures may fall back to Akon's local deterministic reply.
+
+    Development can use fallback for resilience. Production can disable this with:
+    ALLOW_AI_FALLBACK=false
+    """
+    return bool(settings.allow_ai_fallback)
+
+
 def generate_akon_reply(
     message: str,
     safety_result: dict[str, Any],
@@ -515,7 +525,7 @@ def generate_akon_reply(
         detected_emotion=detected_emotion,
     )
 
-    if settings.default_ai_provider.lower().strip() == "mock":
+    if settings.default_ai_provider == "mock":
         return _fallback_reply(
             message=message,
             safety_level=safety_level,
@@ -537,6 +547,9 @@ def generate_akon_reply(
             response_posture=response_posture,
         )
     except LLMProviderError:
+        if not _should_use_local_fallback():
+            raise
+
         return _fallback_reply(
             message=message,
             safety_level=safety_level,

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import API_VERSION, app
+from app.services.llm_provider import LLMProviderError
 from tests.helpers import auth_headers
 
 
@@ -88,3 +89,53 @@ def test_validation_error_uses_standard_error_shape() -> None:
     assert data["error"]["message"] == "Request validation failed."
     assert "details" in data["error"]
     assert "request_id" in data["error"]
+
+
+def test_ai_provider_failure_uses_standard_error_shape_and_does_not_commit(
+    monkeypatch,
+) -> None:
+    headers = auth_headers(client)
+    unique_message = "provider failure rollback probe 8b1d9d36"
+
+    def raise_provider_error(*args, **kwargs) -> str:
+        raise LLMProviderError("Simulated provider failure.")
+
+    monkeypatch.setattr(
+        "app.api.routes.chat.generate_akon_reply",
+        raise_provider_error,
+    )
+
+    response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={
+            "message": unique_message,
+        },
+    )
+
+    assert response.status_code == 503
+
+    data = response.json()
+
+    assert "error" in data
+    assert data["error"]["code"] == "http_error"
+    assert data["error"]["status_code"] == 503
+    assert data["error"]["message"] == (
+        "Akon's AI provider is temporarily unavailable. "
+        "Please try again shortly."
+    )
+    assert "request_id" in data["error"]
+
+    conversations_response = client.get(
+        "/chat/conversations",
+        headers=headers,
+    )
+
+    assert conversations_response.status_code == 200
+
+    conversations = conversations_response.json()
+
+    assert all(
+        conversation["title"] != unique_message
+        for conversation in conversations
+    )
