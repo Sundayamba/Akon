@@ -4,6 +4,7 @@ import type {
   AuthUser,
   ChatResponse,
   ConversationDetail,
+  ConversationReflectionResponse,
   ConversationSummary,
   MemoryCandidateItem,
   MemoryItem,
@@ -181,6 +182,19 @@ export async function submitMessageFeedback(
       note: note?.trim() || null,
     },
   });
+}
+
+export async function reflectOnConversation(
+  token: string,
+  conversationId: string,
+): Promise<ConversationReflectionResponse> {
+  return apiRequest<ConversationReflectionResponse>(
+    `/chat/conversations/${conversationId}/reflection`,
+    {
+      method: "POST",
+      token,
+    },
+  );
 }
 
 export async function listConversations(

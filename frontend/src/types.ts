@@ -72,6 +72,15 @@ export type MessageFeedbackResponse = {
   updated_at: string;
 };
 
+export type ConversationReflectionResponse = {
+  conversation_id: string;
+  title: string;
+  summary: string;
+  dominant_emotion: string | null;
+  supportive_next_step: string;
+  message_count: number;
+};
+
 export type ConversationSummary = {
   id: string;
   title: string | null;

@@ -12,7 +12,7 @@ def test_engine_uses_support_strategy_for_mock_supportive_reply() -> None:
     )
 
     assert "makes sense" in reply
-    assert "Akon senses" in reply
+    assert "overwhelmed" in reply
     assert "One small step" in reply
     assert "I am here with you" in reply
 

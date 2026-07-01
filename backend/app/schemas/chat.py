@@ -125,3 +125,31 @@ class MessageFeedbackResponse(BaseModel):
     note: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ConversationReflectionResponse(BaseModel):
+    conversation_id: str = Field(
+        ...,
+        description="Conversation ID reflected on.",
+    )
+    title: str = Field(
+        ...,
+        description="Short warm title for the reflection.",
+    )
+    summary: str = Field(
+        ...,
+        description="Gentle non-clinical summary of the conversation theme.",
+    )
+    dominant_emotion: str | None = Field(
+        default=None,
+        description="Most common detected emotion in the conversation, if available.",
+    )
+    supportive_next_step: str = Field(
+        ...,
+        description="One gentle next step suggested by the reflection.",
+    )
+    message_count: int = Field(
+        ...,
+        ge=1,
+        description="Number of messages considered.",
+    )

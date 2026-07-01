@@ -609,6 +609,65 @@ h3 {
   box-shadow: 0 10px 26px rgba(255, 138, 91, 0.12);
 }
 
+.reflection-card {
+  display: grid;
+  width: min(100%, 42rem);
+  align-self: center;
+  justify-self: center;
+  gap: 0.75rem;
+  border: 1px solid rgba(217, 111, 67, 0.18);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(255, 209, 102, 0.2), transparent 12rem),
+    radial-gradient(circle at 100% 10%, rgba(216, 180, 254, 0.24), transparent 14rem),
+    rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 18px 48px rgba(123, 73, 42, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  margin: 0.45rem auto;
+  padding: 1.1rem;
+}
+
+.reflection-card > span {
+  color: #d96f43;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.reflection-card h3 {
+  margin-bottom: 0;
+  color: #3c2419;
+  font-size: 1.18rem;
+  letter-spacing: -0.035em;
+}
+
+.reflection-card p {
+  margin-bottom: 0;
+  color: #6f5144;
+  line-height: 1.7;
+}
+
+.reflection-next-step {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(116, 78, 54, 0.1);
+  border-radius: 20px;
+  background: rgba(255, 247, 237, 0.72);
+  padding: 0.85rem;
+}
+
+.reflection-next-step strong {
+  color: #4a3025;
+  font-size: 0.88rem;
+}
+
+.reflection-card small {
+  color: #967063;
+  font-weight: 800;
+}
+
 .message.user {
   align-self: flex-end;
   border-bottom-right-radius: 8px;
@@ -811,6 +870,10 @@ h3 {
   .candidate-actions button,
   .memory-actions button,
   .quality-actions button {
+    width: 100%;
+  }
+
+  .reflection-card {
     width: 100%;
   }
 }

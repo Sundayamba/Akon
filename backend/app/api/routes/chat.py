@@ -11,6 +11,7 @@ from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
     ConversationDetailResponse,
+    ConversationReflectionResponse,
     ConversationSummary,
     GroundingToolItem,
     MemoryCandidateItem,
@@ -23,6 +24,7 @@ from app.services.audit_service import create_audit_log
 from app.services.auth_service import get_current_user
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
+from app.services.reflection_service import build_conversation_reflection
 from app.services.safety_service import classify_safety
 from app.services.support_strategy_service import get_grounding_tool
 
@@ -48,7 +50,7 @@ def _create_conversation_title(message: str) -> str:
     return f"{cleaned[:57]}..."
 
 
-def _audit_risk_from_safety_level(safety_level: str) -> str:
+def _audit_risk_from_safety_level(safety_level: str | None) -> str:
     if safety_level == "S4":
         return "critical"
 
@@ -103,6 +105,37 @@ def _get_user_message_feedback(
         feedback.message_id: feedback.rating
         for feedback in feedback_items
     }
+
+
+def _get_owned_conversation(
+    db: Session,
+    conversation_id: str,
+    user_id: str,
+) -> Conversation:
+    conversation = db.get(Conversation, conversation_id)
+
+    if conversation is None or conversation.user_id != user_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found.",
+        )
+
+    return conversation
+
+
+def _get_owned_conversation_messages(
+    db: Session,
+    conversation_id: str,
+    user_id: str,
+) -> list[Message]:
+    return list(
+        db.scalars(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .where(Message.user_id == user_id)
+            .order_by(Message.created_at.asc())
+        ).all()
+    )
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -308,6 +341,66 @@ def submit_message_feedback(
     )
 
 
+@router.post(
+    "/conversations/{conversation_id}/reflection",
+    response_model=ConversationReflectionResponse,
+)
+def reflect_on_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ConversationReflectionResponse:
+    conversation = _get_owned_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    messages = _get_owned_conversation_messages(
+        db=db,
+        conversation_id=conversation.id,
+        user_id=current_user.id,
+    )
+
+    if not messages:
+        raise HTTPException(
+            status_code=400,
+            detail="Conversation has no messages to reflect on.",
+        )
+
+    reflection = build_conversation_reflection(
+        conversation_id=conversation.id,
+        messages=[
+            {
+                "role": message.role,
+                "content": message.content,
+                "detected_emotion": message.detected_emotion,
+                "safety_level": message.safety_level,
+            }
+            for message in messages
+        ],
+    )
+
+    create_audit_log(
+        db,
+        action="conversation.reflection.generated",
+        entity_type="conversation",
+        entity_id=conversation.id,
+        actor_user_id=current_user.id,
+        risk_level=_audit_risk_from_safety_level(conversation.safety_level),
+        source="chat_route",
+        details={
+            "message_count": reflection.message_count,
+            "dominant_emotion": reflection.dominant_emotion,
+            "safety_level": conversation.safety_level,
+        },
+    )
+
+    db.commit()
+
+    return reflection
+
+
 @router.get("/conversations", response_model=list[ConversationSummary])
 def list_conversations(
     current_user: User = Depends(get_current_user),
@@ -342,20 +435,17 @@ def get_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ConversationDetailResponse:
-    conversation = db.get(Conversation, conversation_id)
+    conversation = _get_owned_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
 
-    if conversation is None or conversation.user_id != current_user.id:
-        raise HTTPException(
-            status_code=404,
-            detail="Conversation not found.",
-        )
-
-    messages = db.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .where(Message.user_id == current_user.id)
-        .order_by(Message.created_at.asc())
-    ).all()
+    messages = _get_owned_conversation_messages(
+        db=db,
+        conversation_id=conversation.id,
+        user_id=current_user.id,
+    )
 
     feedback_by_message_id = _get_user_message_feedback(
         db=db,
