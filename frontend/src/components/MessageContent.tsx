@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type MessageContentProps = {
   content: string;
 };
@@ -151,7 +153,21 @@ function renderInlineText(text: string) {
 }
 
 function MessageContent({ content }: MessageContentProps) {
+  const [copiedCodeIndex, setCopiedCodeIndex] = useState<number | null>(null);
   const blocks = parseContent(content);
+
+  async function handleCopyCode(index: number, code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCodeIndex(index);
+
+      window.setTimeout(() => {
+        setCopiedCodeIndex((current) => (current === index ? null : current));
+      }, 1600);
+    } catch {
+      setCopiedCodeIndex(null);
+    }
+  }
 
   if (blocks.length === 0) {
     return <p className="message-paragraph">No content.</p>;
@@ -161,11 +177,22 @@ function MessageContent({ content }: MessageContentProps) {
     <div className="message-content">
       {blocks.map((block, index) => {
         if (block.type === "code") {
+          const code = block.lines.join("\n");
+
           return (
             <div className="message-code-block" key={`code-${index}`}>
-              {block.language && <span>{block.language}</span>}
+              <span>
+                {block.language || "Code"}
+                <button
+                  className="message-action-button"
+                  type="button"
+                  onClick={() => void handleCopyCode(index, code)}
+                >
+                  {copiedCodeIndex === index ? "Copied" : "Copy code"}
+                </button>
+              </span>
               <pre>
-                <code>{block.lines.join("\n")}</code>
+                <code>{code}</code>
               </pre>
             </div>
           );

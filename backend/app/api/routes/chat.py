@@ -152,6 +152,29 @@ def _get_owned_conversation_messages(
     )
 
 
+def _find_previous_user_message(
+    messages: list[Message],
+    assistant_message_id: str,
+) -> Message | None:
+    assistant_index = next(
+        (
+            index
+            for index, message in enumerate(messages)
+            if message.id == assistant_message_id
+        ),
+        None,
+    )
+
+    if assistant_index is None:
+        return None
+
+    for message in reversed(messages[:assistant_index]):
+        if message.role == "user":
+            return message
+
+    return None
+
+
 def _raise_ai_unavailable_error() -> None:
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -160,6 +183,29 @@ def _raise_ai_unavailable_error() -> None:
             "Please try again shortly."
         ),
     )
+
+
+def _build_memory_candidates(
+    message: str,
+    safety_result: dict,
+) -> list[MemoryCandidateItem]:
+    memory_candidates_raw = extract_memory_candidates(
+        message=message,
+        safety_result=safety_result,
+    )
+
+    return [
+        MemoryCandidateItem(
+            memory_type=candidate["memory_type"],
+            content=candidate["content"],
+            source=candidate["source"],
+            confidence=candidate["confidence"],
+            sensitivity=candidate["sensitivity"],
+            consent_required=candidate["consent_required"],
+            reason=candidate["reason"],
+        )
+        for candidate in memory_candidates_raw
+    ]
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -213,23 +259,10 @@ def send_chat_message(
         detected_emotion=detected_emotion,
     )
 
-    memory_candidates_raw = extract_memory_candidates(
+    memory_candidates = _build_memory_candidates(
         message=payload.message,
         safety_result=safety_result,
     )
-
-    memory_candidates = [
-        MemoryCandidateItem(
-            memory_type=candidate["memory_type"],
-            content=candidate["content"],
-            source=candidate["source"],
-            confidence=candidate["confidence"],
-            sensitivity=candidate["sensitivity"],
-            consent_required=candidate["consent_required"],
-            reason=candidate["reason"],
-        )
-        for candidate in memory_candidates_raw
-    ]
 
     conversation.safety_level = safety_level
 
@@ -286,6 +319,123 @@ def send_chat_message(
         conversation_id=conversation.id,
         assistant_message_id=assistant_message.id,
         memory_candidates=memory_candidates,
+    )
+
+
+@router.post(
+    "/messages/{message_id}/regenerate",
+    response_model=ChatMessageResponse,
+)
+def regenerate_assistant_message(
+    message_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChatMessageResponse:
+    source_message = db.get(Message, message_id)
+
+    if source_message is None or source_message.user_id != current_user.id:
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found.",
+        )
+
+    if source_message.role != "assistant":
+        raise HTTPException(
+            status_code=400,
+            detail="Only Akon's replies can be regenerated.",
+        )
+
+    conversation = _get_owned_conversation(
+        db=db,
+        conversation_id=source_message.conversation_id,
+        user_id=current_user.id,
+    )
+
+    messages = _get_owned_conversation_messages(
+        db=db,
+        conversation_id=conversation.id,
+        user_id=current_user.id,
+    )
+
+    previous_user_message = _find_previous_user_message(
+        messages=messages,
+        assistant_message_id=source_message.id,
+    )
+
+    if previous_user_message is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not find the user message that produced this reply.",
+        )
+
+    safety_result = classify_safety(previous_user_message.content)
+    safety_level = safety_result["level"]
+    detected_emotion = safety_result.get("detected_emotion")
+
+    memory_context = retrieve_memory_context(
+        db=db,
+        user_id=current_user.id,
+        message=previous_user_message.content,
+    )
+
+    try:
+        reply = generate_akon_reply(
+            message=previous_user_message.content,
+            safety_result=safety_result,
+            memory_context=memory_context,
+        )
+    except LLMProviderError:
+        db.rollback()
+        _raise_ai_unavailable_error()
+
+    grounding_tool = _build_grounding_tool_response(
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
+    )
+
+    conversation.safety_level = safety_level
+
+    assistant_message = Message(
+        conversation_id=conversation.id,
+        user_id=current_user.id,
+        role="assistant",
+        content=reply,
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
+    )
+
+    db.add(assistant_message)
+    db.flush()
+
+    create_audit_log(
+        db,
+        action="chat.message.regenerated",
+        entity_type="conversation",
+        entity_id=conversation.id,
+        actor_user_id=current_user.id,
+        risk_level=_audit_risk_from_safety_level(safety_level),
+        source="chat_route",
+        details={
+            "source_message_id": source_message.id,
+            "previous_user_message_id": previous_user_message.id,
+            "new_assistant_message_id": assistant_message.id,
+            "safety_level": safety_level,
+            "detected_emotion": detected_emotion,
+        },
+    )
+
+    db.commit()
+    db.refresh(conversation)
+    db.refresh(assistant_message)
+
+    return ChatMessageResponse(
+        reply=reply,
+        safety_level=safety_level,
+        detected_emotion=detected_emotion,
+        grounding_tool=grounding_tool,
+        conversation_id=conversation.id,
+        assistant_message_id=assistant_message.id,
+        memory_candidates=[],
     )
 
 

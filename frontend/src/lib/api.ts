@@ -226,6 +226,16 @@ export async function sendChatMessage(
   });
 }
 
+export async function regenerateAssistantReply(
+  token: string,
+  messageId: string,
+): Promise<ChatResponse> {
+  return apiRequest<ChatResponse>(`/chat/messages/${messageId}/regenerate`, {
+    method: "POST",
+    token,
+  });
+}
+
 export async function submitMessageFeedback(
   token: string,
   messageId: string,

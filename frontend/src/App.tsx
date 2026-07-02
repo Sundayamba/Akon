@@ -21,6 +21,7 @@ import {
   listMemories,
   loginUser,
   reflectOnConversation,
+  regenerateAssistantReply,
   registerUser,
   revokeMemory,
   sendChatMessage,
@@ -74,6 +75,9 @@ const QUICK_START_PROMPTS = [
   "Analyze this idea and tell me if it is strong.",
   "Help me organize my thoughts clearly.",
 ];
+
+const CONTINUE_RESPONSE_PROMPT =
+  "Please continue from your previous response without repeating what you already wrote.";
 
 function getStoredActiveConversationId(): string | undefined {
   return localStorage.getItem(ACTIVE_CONVERSATION_KEY) || undefined;
@@ -237,6 +241,10 @@ function App() {
   const [feedbackActionMessageId, setFeedbackActionMessageId] = useState<string | null>(
     null,
   );
+  const [feedbackNoteMessageId, setFeedbackNoteMessageId] = useState<string | null>(
+    null,
+  );
+  const [feedbackNoteInput, setFeedbackNoteInput] = useState("");
 
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
@@ -468,6 +476,8 @@ function App() {
     setConversationReflection(null);
     setActiveConversationId(undefined);
     setOpeningConversationId(null);
+    setFeedbackNoteMessageId(null);
+    setFeedbackNoteInput("");
   }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -503,6 +513,8 @@ function App() {
       setRenamingConversationId(null);
       setRenameInput("");
       setConversationActionId(null);
+      setFeedbackNoteMessageId(null);
+      setFeedbackNoteInput("");
 
       await refreshWorkspace(login.access_token);
 
@@ -528,6 +540,8 @@ function App() {
     setConversationReflection(null);
     setRenamingConversationId(null);
     setRenameInput("");
+    setFeedbackNoteMessageId(null);
+    setFeedbackNoteInput("");
     setChatInput("");
     setStatusMessage("New chat started.");
   }
@@ -652,6 +666,8 @@ function App() {
     setMessages((current) => [...current, userMessage]);
     setChatInput("");
     setConversationReflection(null);
+    setFeedbackNoteMessageId(null);
+    setFeedbackNoteInput("");
     setIsChatLoading(true);
 
     const requestId = chatRequestIdRef.current + 1;
@@ -743,9 +759,79 @@ function App() {
     await sendMessageText(lastUserMessage.content);
   }
 
+  async function handleRegenerateAssistantMessage(message: ChatMessage) {
+    if (!token || !message.id || message.role !== "assistant" || isChatLoading) {
+      return;
+    }
+
+    resetFeedback();
+    setConversationReflection(null);
+    setFeedbackNoteMessageId(null);
+    setFeedbackNoteInput("");
+    setIsChatLoading(true);
+
+    const requestId = chatRequestIdRef.current + 1;
+    chatRequestIdRef.current = requestId;
+
+    try {
+      const response = await regenerateAssistantReply(token, message.id);
+
+      if (chatRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setActiveConversationId(response.conversation_id);
+      storeActiveConversationId(response.conversation_id);
+
+      setMessages((current) => [
+        ...current,
+        {
+          id: response.assistant_message_id,
+          role: "assistant",
+          content: response.reply,
+          createdAt: new Date().toISOString(),
+          safetyLevel: response.safety_level,
+          detectedEmotion: response.detected_emotion,
+          groundingTool: response.grounding_tool,
+          feedbackRating: null,
+        },
+      ]);
+
+      setStatusMessage("Akon regenerated that reply.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      if (chatRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      if (chatRequestIdRef.current === requestId) {
+        setIsChatLoading(false);
+      }
+    }
+  }
+
+  async function handleContinueResponse() {
+    resetFeedback();
+    await sendMessageText(CONTINUE_RESPONSE_PROMPT);
+  }
+
+  function handleBeginNotHelpfulFeedback(messageId: string) {
+    resetFeedback();
+    setFeedbackNoteMessageId(messageId);
+    setFeedbackNoteInput("");
+  }
+
+  function handleCancelFeedbackNote() {
+    setFeedbackNoteMessageId(null);
+    setFeedbackNoteInput("");
+  }
+
   async function handleSubmitFeedback(
     messageId: string,
     rating: FeedbackRating,
+    note?: string,
   ) {
     if (!token || feedbackActionMessageId) {
       return;
@@ -755,7 +841,7 @@ function App() {
     setFeedbackActionMessageId(messageId);
 
     try {
-      const feedback = await submitMessageFeedback(token, messageId, rating);
+      const feedback = await submitMessageFeedback(token, messageId, rating, note);
 
       setMessages((current) =>
         current.map((message) =>
@@ -767,6 +853,9 @@ function App() {
             : message,
         ),
       );
+
+      setFeedbackNoteMessageId(null);
+      setFeedbackNoteInput("");
 
       setStatusMessage(
         rating === "helpful"
@@ -1017,7 +1106,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.3</p>
+              <p className="eyebrow">Akon AI - v0.4.4</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -1346,6 +1435,8 @@ function App() {
                 {messages.map((message, index) => {
                   const messageKey = message.id || `${message.role}-${index}`;
                   const canGiveFeedback = message.role === "assistant" && Boolean(message.id);
+                  const canUseAssistantActions =
+                    message.role === "assistant" && Boolean(message.id);
 
                   return (
                     <article className={`message ${message.role}`} key={messageKey}>
@@ -1360,6 +1451,28 @@ function App() {
                           >
                             {copiedMessageKey === messageKey ? "Copied" : "Copy"}
                           </button>
+
+                          {canUseAssistantActions && (
+                            <>
+                              <button
+                                className="message-action-button"
+                                disabled={isChatLoading}
+                                type="button"
+                                onClick={() => void handleRegenerateAssistantMessage(message)}
+                              >
+                                Regenerate
+                              </button>
+
+                              <button
+                                className="message-action-button"
+                                disabled={isChatLoading}
+                                type="button"
+                                onClick={() => void handleContinueResponse()}
+                              >
+                                Continue
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -1418,15 +1531,55 @@ function App() {
                               disabled={feedbackActionMessageId !== null}
                               type="button"
                               onClick={() =>
-                                void handleSubmitFeedback(
-                                  message.id as string,
-                                  "not_helpful",
-                                )
+                                handleBeginNotHelpfulFeedback(message.id as string)
                               }
                             >
                               Not helpful
                             </button>
                           </div>
+
+                          {feedbackNoteMessageId === message.id && (
+                            <form
+                              className="stack-form"
+                              onSubmit={(event) => {
+                                event.preventDefault();
+                                void handleSubmitFeedback(
+                                  message.id as string,
+                                  "not_helpful",
+                                  feedbackNoteInput,
+                                );
+                              }}
+                            >
+                              <label>
+                                Optional note
+                                <textarea
+                                  value={feedbackNoteInput}
+                                  maxLength={1000}
+                                  placeholder="What could Akon improve in this reply?"
+                                  onChange={(event) =>
+                                    setFeedbackNoteInput(event.target.value)
+                                  }
+                                />
+                              </label>
+
+                              <div className="quality-actions">
+                                <button
+                                  disabled={feedbackActionMessageId !== null}
+                                  type="submit"
+                                >
+                                  Send feedback
+                                </button>
+                                <button
+                                  className="ghost-button"
+                                  disabled={feedbackActionMessageId !== null}
+                                  type="button"
+                                  onClick={handleCancelFeedbackNote}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </form>
+                          )}
                         </div>
                       )}
                     </article>
