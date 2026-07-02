@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
+import MessageContent from "./components/MessageContent";
 import "./App.css";
 import {
   AUTH_EXPIRED_EVENT,
@@ -864,7 +865,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.0</p>
+              <p className="eyebrow">Akon AI - v0.4.1</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -1135,7 +1136,7 @@ function App() {
                         </div>
                       </div>
 
-                      <p>{message.content}</p>
+                      <MessageContent content={message.content} />
 
                       <div className="message-meta">
                         <time dateTime={message.createdAt}>
