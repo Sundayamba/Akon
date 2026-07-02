@@ -17,10 +17,12 @@ import {
   listConversations,
   listMemories,
   loginUser,
+  reflectOnConversation,
   registerUser,
   revokeMemory,
   sendChatMessage,
   storeAccessToken,
+  submitMessageFeedback,
   updateMemory,
 } from "./lib/api";
 import type {
@@ -28,7 +30,10 @@ import type {
   AuthUser,
   ChatResponse,
   ConversationDetail,
+  ConversationReflectionResponse,
   ConversationSummary,
+  FeedbackRating,
+  GroundingToolItem,
   MemoryCandidateItem,
   MemoryItem,
 } from "./types";
@@ -36,11 +41,14 @@ import type {
 type AuthMode = "login" | "register";
 
 type ChatMessage = {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   createdAt: string;
   safetyLevel?: string | null;
   detectedEmotion?: string | null;
+  groundingTool?: GroundingToolItem | null;
+  feedbackRating?: FeedbackRating | null;
 };
 
 type MemoryEditState = {
@@ -88,7 +96,7 @@ function formatErrorMessage(error: unknown): string {
 function buildChatFailureMessage(error: unknown): string {
   if (isAiProviderUnavailableError(error)) {
     return (
-      "I’m having trouble reaching my AI provider right now. " +
+      "I'm having trouble reaching my AI provider right now. " +
       "Your message was not saved, so you can try again shortly without losing the thread."
     );
   }
@@ -150,11 +158,14 @@ function mapConversationToMessages(
   conversation: ConversationDetail,
 ): ChatMessage[] {
   return conversation.messages.map((message) => ({
+    id: message.id,
     role: message.role === "assistant" ? "assistant" : "user",
     content: message.content,
     createdAt: message.created_at,
     safetyLevel: message.safety_level,
     detectedEmotion: message.detected_emotion,
+    groundingTool: null,
+    feedbackRating: message.feedback_rating,
   }));
 }
 
@@ -174,6 +185,10 @@ function buildMemoryEditState(memory: MemoryItem): MemoryEditState {
     sensitivity: memory.sensitivity,
     consentState: memory.consent_state,
   };
+}
+
+function getLastUserMessage(messages: ChatMessage[]): ChatMessage | undefined {
+  return [...messages].reverse().find((message) => message.role === "user");
 }
 
 function App() {
@@ -204,10 +219,18 @@ function App() {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
+  const [conversationReflection, setConversationReflection] =
+    useState<ConversationReflectionResponse | null>(null);
+  const [copiedMessageKey, setCopiedMessageKey] = useState<string | null>(null);
+  const [feedbackActionMessageId, setFeedbackActionMessageId] = useState<string | null>(
+    null,
+  );
+
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [isMemoryLoading, setIsMemoryLoading] = useState(false);
+  const [isReflectionLoading, setIsReflectionLoading] = useState(false);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
   const [openingConversationId, setOpeningConversationId] = useState<string | null>(
     null,
@@ -222,8 +245,10 @@ function App() {
     isAuthLoading ||
     isChatLoading ||
     isMemoryLoading ||
+    isReflectionLoading ||
     isWorkspaceLoading ||
     candidateActionIndex !== null ||
+    feedbackActionMessageId !== null ||
     memoryActionId !== null;
 
   const userLabel = useMemo(() => {
@@ -248,6 +273,10 @@ function App() {
   const activeMemoryCount = memories.filter(
     (memory) => memory.consent_state !== "revoked",
   ).length;
+
+  const canReflectOnConversation = Boolean(
+    token && activeConversationId && messages.length >= 2 && !isReflectionLoading,
+  );
 
   function cancelPendingConversationOpen() {
     conversationOpenRequestRef.current += 1;
@@ -283,7 +312,7 @@ function App() {
     });
 
     return () => window.cancelAnimationFrame(frameId);
-  }, [messages, isChatLoading]);
+  }, [messages, isChatLoading, conversationReflection]);
 
   useEffect(() => {
     async function restoreSession() {
@@ -351,6 +380,7 @@ function App() {
     setActiveConversationId(conversationId);
     setMessages([]);
     setMemoryCandidates([]);
+    setConversationReflection(null);
     resetFeedback();
 
     try {
@@ -364,6 +394,7 @@ function App() {
       storeActiveConversationId(conversation.id);
       setMessages(mapConversationToMessages(conversation));
       setMemoryCandidates([]);
+      setConversationReflection(null);
 
       if (shouldSetStatus) {
         setStatusMessage("Conversation reopened.");
@@ -401,6 +432,7 @@ function App() {
     setMemoryEditState(null);
     setConversations([]);
     setAuditLogs([]);
+    setConversationReflection(null);
     setActiveConversationId(undefined);
     setOpeningConversationId(null);
   }
@@ -433,6 +465,7 @@ function App() {
       setMessages([]);
       setMemoryCandidates([]);
       setMemoryEditState(null);
+      setConversationReflection(null);
 
       await refreshWorkspace(login.access_token);
 
@@ -455,6 +488,7 @@ function App() {
     setActiveConversationId(undefined);
     setMessages([]);
     setMemoryCandidates([]);
+    setConversationReflection(null);
     setChatInput("");
     setStatusMessage("New chat started.");
   }
@@ -472,15 +506,12 @@ function App() {
     await openConversation(token, conversationId);
   }
 
-  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    resetFeedback();
-
-    const trimmedMessage = chatInput.trim();
-
-    if (!token || !trimmedMessage || isChatLoading) {
+  async function sendMessageText(messageText: string) {
+    if (!token || !messageText.trim() || isChatLoading) {
       return;
     }
+
+    const trimmedMessage = messageText.trim();
 
     const userMessage: ChatMessage = {
       role: "user",
@@ -490,6 +521,7 @@ function App() {
 
     setMessages((current) => [...current, userMessage]);
     setChatInput("");
+    setConversationReflection(null);
     setIsChatLoading(true);
 
     try {
@@ -506,11 +538,14 @@ function App() {
       setMessages((current) => [
         ...current,
         {
+          id: response.assistant_message_id,
           role: "assistant",
           content: response.reply,
           createdAt: new Date().toISOString(),
           safetyLevel: response.safety_level,
           detectedEmotion: response.detected_emotion,
+          groundingTool: response.grounding_tool,
+          feedbackRating: null,
         },
       ]);
 
@@ -533,6 +568,100 @@ function App() {
       }
     } finally {
       setIsChatLoading(false);
+    }
+  }
+
+  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetFeedback();
+
+    await sendMessageText(chatInput);
+  }
+
+  async function handleRetryLastUserMessage() {
+    const lastUserMessage = getLastUserMessage(messages);
+
+    if (!lastUserMessage) {
+      setStatusMessage("There is no previous user message to retry.");
+      return;
+    }
+
+    resetFeedback();
+    await sendMessageText(lastUserMessage.content);
+  }
+
+  async function handleSubmitFeedback(
+    messageId: string,
+    rating: FeedbackRating,
+  ) {
+    if (!token || feedbackActionMessageId) {
+      return;
+    }
+
+    resetFeedback();
+    setFeedbackActionMessageId(messageId);
+
+    try {
+      const feedback = await submitMessageFeedback(token, messageId, rating);
+
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                feedbackRating: feedback.rating,
+              }
+            : message,
+        ),
+      );
+
+      setStatusMessage(
+        rating === "helpful"
+          ? "Thanks. Akon will remember that this reply was helpful."
+          : "Thanks. Akon will use that feedback to improve.",
+      );
+
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setFeedbackActionMessageId(null);
+    }
+  }
+
+  async function handleReflectOnConversation() {
+    if (!token || !activeConversationId || isReflectionLoading) {
+      return;
+    }
+
+    resetFeedback();
+    setIsReflectionLoading(true);
+
+    try {
+      const reflection = await reflectOnConversation(token, activeConversationId);
+      setConversationReflection(reflection);
+      setStatusMessage("Conversation reflection generated.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setIsReflectionLoading(false);
+    }
+  }
+
+  async function handleCopyMessage(messageKey: string, content: string) {
+    resetFeedback();
+
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageKey(messageKey);
+      setStatusMessage("Message copied.");
+
+      window.setTimeout(() => {
+        setCopiedMessageKey((current) => (current === messageKey ? null : current));
+      }, 1600);
+    } catch {
+      setErrorMessage("Could not copy this message. Please copy it manually.");
     }
   }
 
@@ -735,7 +864,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI · v0.3.9</p>
+              <p className="eyebrow">Akon AI - v0.4.0</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -869,7 +998,7 @@ function App() {
                 >
                   <strong>{conversation.title || "Untitled conversation"}</strong>
                   <span>
-                    {conversation.safety_level || "Normal"} ·{" "}
+                    {conversation.safety_level || "Normal"} -{" "}
                     {formatConversationDate(conversation.created_at)}
                   </span>
                 </button>
@@ -900,10 +1029,30 @@ function App() {
             <h1>{activeConversationTitle}</h1>
           </div>
 
-          <div className="workspace-metrics" aria-label="Workspace metrics">
-            <span>{conversations.length} chats</span>
-            <span>{activeMemoryCount} memories</span>
-            <span>{auditLogs.length} activities</span>
+          <div className="topbar-actions">
+            <div className="workspace-metrics" aria-label="Workspace metrics">
+              <span>{conversations.length} chats</span>
+              <span>{activeMemoryCount} memories</span>
+              <span>{auditLogs.length} activities</span>
+            </div>
+
+            <button
+              className="ghost-button compact-button"
+              disabled={!canReflectOnConversation}
+              type="button"
+              onClick={() => void handleReflectOnConversation()}
+            >
+              {isReflectionLoading ? "Reflecting..." : "Reflect"}
+            </button>
+
+            <button
+              className="ghost-button compact-button"
+              disabled={isChatLoading || !getLastUserMessage(messages)}
+              type="button"
+              onClick={() => void handleRetryLastUserMessage()}
+            >
+              Retry last
+            </button>
           </div>
         </header>
 
@@ -945,27 +1094,117 @@ function App() {
                 </div>
               </div>
             ) : (
-              messages.map((message, index) => (
-                <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
-                  <strong>{message.role === "user" ? "You" : "Akon"}</strong>
-                  <p>{message.content}</p>
-                  <div className="message-meta">
-                    <time dateTime={message.createdAt}>
-                      {formatMessageTimestamp(message.createdAt)}
-                    </time>
-                    {message.safetyLevel && message.safetyLevel !== "S0" && (
-                      <span>Care level: {message.safetyLevel}</span>
-                    )}
-                  </div>
-                  {message.role === "assistant" &&
-                    message.detectedEmotion &&
-                    message.detectedEmotion !== "neutral" && (
-                      <small className="message-emotion">
-                        Akon sensed: {message.detectedEmotion}
-                      </small>
-                    )}
-                </article>
-              ))
+              <>
+                {conversationReflection && (
+                  <section className="reflection-card">
+                    <span>Conversation reflection</span>
+                    <h3>{conversationReflection.title}</h3>
+                    <p>{conversationReflection.summary}</p>
+
+                    <div className="reflection-next-step">
+                      <strong>Suggested next step</strong>
+                      <p>{conversationReflection.supportive_next_step}</p>
+                    </div>
+
+                    <small>
+                      {conversationReflection.message_count} messages
+                      {conversationReflection.dominant_emotion
+                        ? ` - ${conversationReflection.dominant_emotion}`
+                        : ""}
+                    </small>
+                  </section>
+                )}
+
+                {messages.map((message, index) => {
+                  const messageKey = message.id || `${message.role}-${index}`;
+                  const canGiveFeedback = message.role === "assistant" && Boolean(message.id);
+
+                  return (
+                    <article className={`message ${message.role}`} key={messageKey}>
+                      <div className="message-heading">
+                        <strong>{message.role === "user" ? "You" : "Akon"}</strong>
+
+                        <div className="message-actions">
+                          <button
+                            className="message-action-button"
+                            type="button"
+                            onClick={() => void handleCopyMessage(messageKey, message.content)}
+                          >
+                            {copiedMessageKey === messageKey ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <p>{message.content}</p>
+
+                      <div className="message-meta">
+                        <time dateTime={message.createdAt}>
+                          {formatMessageTimestamp(message.createdAt)}
+                        </time>
+                        {message.safetyLevel && message.safetyLevel !== "S0" && (
+                          <span>Care level: {message.safetyLevel}</span>
+                        )}
+                      </div>
+
+                      {message.role === "assistant" &&
+                        message.detectedEmotion &&
+                        message.detectedEmotion !== "neutral" && (
+                          <small className="message-emotion">
+                            Akon sensed: {message.detectedEmotion}
+                          </small>
+                        )}
+
+                      {message.role === "assistant" && message.groundingTool && (
+                        <div className="message-grounding">
+                          <span>Grounding tool</span>
+                          <strong>{message.groundingTool.name}</strong>
+                          <p>{message.groundingTool.instruction}</p>
+                        </div>
+                      )}
+
+                      {canGiveFeedback && (
+                        <div className="message-quality">
+                          <span>Was this useful?</span>
+                          <div className="quality-actions">
+                            <button
+                              className={
+                                message.feedbackRating === "helpful"
+                                  ? "quality-button selected"
+                                  : "quality-button"
+                              }
+                              disabled={feedbackActionMessageId !== null}
+                              type="button"
+                              onClick={() =>
+                                void handleSubmitFeedback(message.id as string, "helpful")
+                              }
+                            >
+                              Helpful
+                            </button>
+
+                            <button
+                              className={
+                                message.feedbackRating === "not_helpful"
+                                  ? "quality-button selected"
+                                  : "quality-button"
+                              }
+                              disabled={feedbackActionMessageId !== null}
+                              type="button"
+                              onClick={() =>
+                                void handleSubmitFeedback(
+                                  message.id as string,
+                                  "not_helpful",
+                                )
+                              }
+                            >
+                              Not helpful
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </>
             )}
 
             {isChatLoading && (
@@ -1225,7 +1464,7 @@ function App() {
 
                     <p>{memory.content}</p>
                     <small>
-                      {memory.confidence} · {memory.sensitivity} ·{" "}
+                      {memory.confidence} - {memory.sensitivity} -{" "}
                       {memory.source || "manual"}
                     </small>
 
