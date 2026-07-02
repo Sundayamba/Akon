@@ -8,6 +8,7 @@ import {
   clearStoredAccessToken,
   confirmMemoryCandidate,
   createMemory,
+  deleteConversation,
   deleteMemory,
   getApiErrorMessage,
   getConversation,
@@ -24,6 +25,7 @@ import {
   sendChatMessage,
   storeAccessToken,
   submitMessageFeedback,
+  updateConversationTitle,
   updateMemory,
 } from "./lib/api";
 import type {
@@ -218,6 +220,13 @@ function App() {
   const [memoryActionId, setMemoryActionId] = useState<string | null>(null);
 
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [renamingConversationId, setRenamingConversationId] = useState<string | null>(
+    null,
+  );
+  const [renameInput, setRenameInput] = useState("");
+  const [conversationActionId, setConversationActionId] = useState<string | null>(null);
+
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const [conversationReflection, setConversationReflection] =
@@ -249,6 +258,7 @@ function App() {
     isReflectionLoading ||
     isWorkspaceLoading ||
     candidateActionIndex !== null ||
+    conversationActionId !== null ||
     feedbackActionMessageId !== null ||
     memoryActionId !== null;
 
@@ -270,6 +280,20 @@ function App() {
         ?.title || "Conversation"
     );
   }, [activeConversationId, conversations]);
+
+  const filteredConversations = useMemo(() => {
+    const normalizedSearch = conversationSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return conversations;
+    }
+
+    return conversations.filter((conversation) =>
+      (conversation.title || "Untitled conversation")
+        .toLowerCase()
+        .includes(normalizedSearch),
+    );
+  }, [conversationSearch, conversations]);
 
   const activeMemoryCount = memories.filter(
     (memory) => memory.consent_state !== "revoked",
@@ -382,6 +406,8 @@ function App() {
     setMessages([]);
     setMemoryCandidates([]);
     setConversationReflection(null);
+    setRenamingConversationId(null);
+    setRenameInput("");
     resetFeedback();
 
     try {
@@ -432,6 +458,10 @@ function App() {
     setMemories([]);
     setMemoryEditState(null);
     setConversations([]);
+    setConversationSearch("");
+    setRenamingConversationId(null);
+    setRenameInput("");
+    setConversationActionId(null);
     setAuditLogs([]);
     setConversationReflection(null);
     setActiveConversationId(undefined);
@@ -467,6 +497,10 @@ function App() {
       setMemoryCandidates([]);
       setMemoryEditState(null);
       setConversationReflection(null);
+      setConversationSearch("");
+      setRenamingConversationId(null);
+      setRenameInput("");
+      setConversationActionId(null);
 
       await refreshWorkspace(login.access_token);
 
@@ -490,6 +524,8 @@ function App() {
     setMessages([]);
     setMemoryCandidates([]);
     setConversationReflection(null);
+    setRenamingConversationId(null);
+    setRenameInput("");
     setChatInput("");
     setStatusMessage("New chat started.");
   }
@@ -505,6 +541,97 @@ function App() {
     }
 
     await openConversation(token, conversationId);
+  }
+
+  function handleBeginRenameConversation(conversation: ConversationSummary) {
+    resetFeedback();
+    setRenamingConversationId(conversation.id);
+    setRenameInput(conversation.title || "Untitled conversation");
+  }
+
+  function handleCancelRenameConversation() {
+    setRenamingConversationId(null);
+    setRenameInput("");
+  }
+
+  async function handleSubmitRenameConversation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetFeedback();
+
+    if (!token || !renamingConversationId || !renameInput.trim()) {
+      return;
+    }
+
+    setConversationActionId(renamingConversationId);
+
+    try {
+      const updatedConversation = await updateConversationTitle(
+        token,
+        renamingConversationId,
+        renameInput.trim(),
+      );
+
+      setConversations((current) =>
+        current.map((conversation) =>
+          conversation.id === updatedConversation.id ? updatedConversation : conversation,
+        ),
+      );
+
+      setRenamingConversationId(null);
+      setRenameInput("");
+      setStatusMessage("Conversation renamed.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setConversationActionId(null);
+    }
+  }
+
+  async function handleDeleteConversation(conversation: ConversationSummary) {
+    if (!token) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(
+      `Delete "${conversation.title || "Untitled conversation"}"? This cannot be undone.`,
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    resetFeedback();
+    setConversationActionId(conversation.id);
+
+    try {
+      await deleteConversation(token, conversation.id);
+
+      setConversations((current) =>
+        current.filter((currentConversation) => currentConversation.id !== conversation.id),
+      );
+
+      if (activeConversationId === conversation.id) {
+        clearActiveConversationId();
+        setActiveConversationId(undefined);
+        setMessages([]);
+        setMemoryCandidates([]);
+        setConversationReflection(null);
+        setChatInput("");
+      }
+
+      if (renamingConversationId === conversation.id) {
+        setRenamingConversationId(null);
+        setRenameInput("");
+      }
+
+      setStatusMessage("Conversation deleted.");
+      await refreshWorkspace(token);
+    } catch (error) {
+      setErrorMessage(formatErrorMessage(error));
+    } finally {
+      setConversationActionId(null);
+    }
   }
 
   async function sendMessageText(messageText: string) {
@@ -865,7 +992,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.1</p>
+              <p className="eyebrow">Akon AI - v0.4.2</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -979,31 +1106,106 @@ function App() {
             {isWorkspaceLoading && <small>Syncing...</small>}
           </div>
 
+          <input
+            className="sidebar-search-input"
+            value={conversationSearch}
+            placeholder="Search chats..."
+            onChange={(event) => setConversationSearch(event.target.value)}
+          />
+
           <div className="conversation-list">
-            {conversations.length === 0 ? (
-              <p className="empty-state">No chats yet.</p>
+            {filteredConversations.length === 0 ? (
+              <div className="sidebar-empty-card">
+                <p>
+                  {conversationSearch.trim()
+                    ? "No chats match your search."
+                    : "No chats yet."}
+                </p>
+              </div>
             ) : (
-              conversations.map((conversation) => (
-                <button
-                  className={
-                    conversation.id === activeConversationId
-                      ? "conversation-item active"
-                      : "conversation-item"
-                  }
-                  key={conversation.id}
-                  type="button"
-                  aria-current={
-                    conversation.id === activeConversationId ? "true" : undefined
-                  }
-                  onClick={() => void handleConversationClick(conversation.id)}
-                >
-                  <strong>{conversation.title || "Untitled conversation"}</strong>
-                  <span>
-                    {conversation.safety_level || "Normal"} -{" "}
-                    {formatConversationDate(conversation.created_at)}
-                  </span>
-                </button>
-              ))
+              filteredConversations.map((conversation) => {
+                const isRenaming = renamingConversationId === conversation.id;
+                const isActing = conversationActionId === conversation.id;
+
+                if (isRenaming) {
+                  return (
+                    <form
+                      className="rename-card"
+                      key={conversation.id}
+                      onSubmit={handleSubmitRenameConversation}
+                    >
+                      <label>
+                        Rename chat
+                        <input
+                          value={renameInput}
+                          autoFocus
+                          maxLength={120}
+                          onChange={(event) => setRenameInput(event.target.value)}
+                        />
+                      </label>
+
+                      <div className="rename-actions">
+                        <button disabled={isActing || !renameInput.trim()} type="submit">
+                          {isActing ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          className="ghost-button"
+                          disabled={isActing}
+                          type="button"
+                          onClick={handleCancelRenameConversation}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  );
+                }
+
+                return (
+                  <div
+                    className={
+                      conversation.id === activeConversationId
+                        ? "conversation-row active"
+                        : "conversation-row"
+                    }
+                    key={conversation.id}
+                  >
+                    <button
+                      className="conversation-item"
+                      type="button"
+                      aria-current={
+                        conversation.id === activeConversationId ? "true" : undefined
+                      }
+                      onClick={() => void handleConversationClick(conversation.id)}
+                    >
+                      <strong>{conversation.title || "Untitled conversation"}</strong>
+                      <span>
+                        {conversation.safety_level || "Normal"} -{" "}
+                        {formatConversationDate(conversation.created_at)}
+                      </span>
+                    </button>
+
+                    <div className="conversation-action-row">
+                      <button
+                        className="conversation-action-button"
+                        disabled={Boolean(conversationActionId)}
+                        type="button"
+                        onClick={() => handleBeginRenameConversation(conversation)}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="conversation-action-button danger"
+                        disabled={Boolean(conversationActionId)}
+                        type="button"
+                        onClick={() => void handleDeleteConversation(conversation)}
+                      >
+                        {isActing ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         </section>

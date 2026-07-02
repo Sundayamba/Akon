@@ -3,6 +3,7 @@ import type {
   AuditLog,
   AuthUser,
   ChatResponse,
+  ConversationDeleteResponse,
   ConversationDetail,
   ConversationReflectionResponse,
   ConversationSummary,
@@ -267,6 +268,30 @@ export async function getConversation(
   conversationId: string,
 ): Promise<ConversationDetail> {
   return apiRequest<ConversationDetail>(`/chat/conversations/${conversationId}`, {
+    token,
+  });
+}
+
+export async function updateConversationTitle(
+  token: string,
+  conversationId: string,
+  title: string,
+): Promise<ConversationSummary> {
+  return apiRequest<ConversationSummary>(`/chat/conversations/${conversationId}`, {
+    method: "PATCH",
+    token,
+    body: {
+      title,
+    },
+  });
+}
+
+export async function deleteConversation(
+  token: string,
+  conversationId: string,
+): Promise<ConversationDeleteResponse> {
+  return apiRequest<ConversationDeleteResponse>(`/chat/conversations/${conversationId}`, {
+    method: "DELETE",
     token,
   });
 }

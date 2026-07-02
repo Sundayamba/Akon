@@ -105,6 +105,26 @@ class ConversationDetailResponse(BaseModel):
     messages: list[MessageItem]
 
 
+class ConversationUpdateRequest(BaseModel):
+    title: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        description="New user-facing title for the conversation.",
+    )
+
+
+class ConversationDeleteResponse(BaseModel):
+    id: str = Field(
+        ...,
+        description="Deleted conversation ID.",
+    )
+    deleted: bool = Field(
+        ...,
+        description="Whether the conversation was deleted.",
+    )
+
+
 class MessageFeedbackRequest(BaseModel):
     rating: FeedbackRating = Field(
         ...,

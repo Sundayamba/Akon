@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -10,9 +10,11 @@ from app.models.user import User
 from app.schemas.chat import (
     ChatMessageRequest,
     ChatMessageResponse,
+    ConversationDeleteResponse,
     ConversationDetailResponse,
     ConversationReflectionResponse,
     ConversationSummary,
+    ConversationUpdateRequest,
     GroundingToolItem,
     MemoryCandidateItem,
     MessageFeedbackRequest,
@@ -85,6 +87,17 @@ def _build_grounding_tool_response(
     return GroundingToolItem(
         name=tool["name"],
         instruction=tool["instruction"],
+    )
+
+
+def _conversation_to_summary(conversation: Conversation) -> ConversationSummary:
+    return ConversationSummary(
+        id=conversation.id,
+        title=conversation.title,
+        channel=conversation.channel,
+        safety_level=conversation.safety_level,
+        created_at=conversation.created_at,
+        updated_at=conversation.updated_at,
     )
 
 
@@ -428,17 +441,7 @@ def list_conversations(
         .limit(50)
     ).all()
 
-    return [
-        ConversationSummary(
-            id=conversation.id,
-            title=conversation.title,
-            channel=conversation.channel,
-            safety_level=conversation.safety_level,
-            created_at=conversation.created_at,
-            updated_at=conversation.updated_at,
-        )
-        for conversation in conversations
-    ]
+    return [_conversation_to_summary(conversation) for conversation in conversations]
 
 
 @router.get(
@@ -487,4 +490,102 @@ def get_conversation(
             )
             for message in messages
         ],
+    )
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationSummary,
+)
+def update_conversation(
+    conversation_id: str,
+    payload: ConversationUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ConversationSummary:
+    conversation = _get_owned_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    cleaned_title = " ".join(payload.title.strip().split())
+
+    if not cleaned_title:
+        raise HTTPException(
+            status_code=400,
+            detail="Conversation title cannot be empty.",
+        )
+
+    old_title = conversation.title
+    conversation.title = cleaned_title
+
+    create_audit_log(
+        db,
+        action="conversation.updated",
+        entity_type="conversation",
+        entity_id=conversation.id,
+        actor_user_id=current_user.id,
+        risk_level="low",
+        source="chat_route",
+        details={
+            "old_title": old_title,
+            "new_title": cleaned_title,
+        },
+    )
+
+    db.commit()
+    db.refresh(conversation)
+
+    return _conversation_to_summary(conversation)
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    response_model=ConversationDeleteResponse,
+)
+def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ConversationDeleteResponse:
+    conversation = _get_owned_conversation(
+        db=db,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
+    deleted_title = conversation.title
+
+    db.execute(
+        delete(MessageFeedback)
+        .where(MessageFeedback.conversation_id == conversation.id)
+        .where(MessageFeedback.user_id == current_user.id)
+    )
+
+    db.execute(
+        delete(Message)
+        .where(Message.conversation_id == conversation.id)
+        .where(Message.user_id == current_user.id)
+    )
+
+    create_audit_log(
+        db,
+        action="conversation.deleted",
+        entity_type="conversation",
+        entity_id=conversation.id,
+        actor_user_id=current_user.id,
+        risk_level="low",
+        source="chat_route",
+        details={
+            "title": deleted_title,
+        },
+    )
+
+    db.delete(conversation)
+    db.commit()
+
+    return ConversationDeleteResponse(
+        id=conversation_id,
+        deleted=True,
     )

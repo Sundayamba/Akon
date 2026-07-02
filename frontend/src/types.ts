@@ -90,6 +90,11 @@ export type ConversationSummary = {
   updated_at: string;
 };
 
+export type ConversationDeleteResponse = {
+  id: string;
+  deleted: boolean;
+};
+
 export type MessageItem = {
   id: string;
   role: string;
