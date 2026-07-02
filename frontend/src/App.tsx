@@ -54,6 +54,15 @@ type MemoryEditState = {
 
 const ACTIVE_CONVERSATION_KEY = "akon_active_conversation_id";
 
+const QUICK_START_PROMPTS = [
+  "Help me think through an important decision.",
+  "Teach me something step by step.",
+  "Draft a professional message for me.",
+  "Help me plan my next move.",
+  "Analyze this idea and tell me if it is strong.",
+  "Help me organize my thoughts clearly.",
+];
+
 function getStoredActiveConversationId(): string | undefined {
   return localStorage.getItem(ACTIVE_CONVERSATION_KEY) || undefined;
 }
@@ -120,6 +129,23 @@ function formatMessageTimestamp(createdAt: string): string {
   }).format(messageDate);
 }
 
+function formatConversationDate(createdAt?: string | null): string {
+  if (!createdAt) {
+    return "Recent";
+  }
+
+  const conversationDate = new Date(createdAt);
+
+  if (Number.isNaN(conversationDate.getTime())) {
+    return "Recent";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(conversationDate);
+}
+
 function mapConversationToMessages(
   conversation: ConversationDetail,
 ): ChatMessage[] {
@@ -158,9 +184,9 @@ function App() {
   const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
-  const [email, setEmail] = useState("rex@example.com");
+  const [email, setEmail] = useState("user@example.com");
   const [password, setPassword] = useState("strongpassword123");
-  const [displayName, setDisplayName] = useState("Rex");
+  const [displayName, setDisplayName] = useState("Akon User");
 
   const [chatInput, setChatInput] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | undefined>(
@@ -207,6 +233,21 @@ function App() {
 
     return currentUser.display_name || currentUser.email;
   }, [currentUser]);
+
+  const activeConversationTitle = useMemo(() => {
+    if (!activeConversationId) {
+      return "New chat";
+    }
+
+    return (
+      conversations.find((conversation) => conversation.id === activeConversationId)
+        ?.title || "Conversation"
+    );
+  }, [activeConversationId, conversations]);
+
+  const activeMemoryCount = memories.filter(
+    (memory) => memory.consent_state !== "revoked",
+  ).length;
 
   function cancelPendingConversationOpen() {
     conversationOpenRequestRef.current += 1;
@@ -395,7 +436,7 @@ function App() {
 
       await refreshWorkspace(login.access_token);
 
-      setStatusMessage("Welcome in. Akon is ready to listen.");
+      setStatusMessage("Welcome in. Akon is ready.");
     } catch (error) {
       setErrorMessage(formatErrorMessage(error));
     } finally {
@@ -415,7 +456,12 @@ function App() {
     setMessages([]);
     setMemoryCandidates([]);
     setChatInput("");
-    setStatusMessage("New conversation started.");
+    setStatusMessage("New chat started.");
+  }
+
+  function handleQuickPrompt(prompt: string) {
+    resetFeedback();
+    setChatInput(prompt);
   }
 
   async function handleConversationClick(conversationId: string) {
@@ -525,7 +571,7 @@ function App() {
       });
 
       setMemoryContent("");
-      setStatusMessage("Akon saved that understanding.");
+      setStatusMessage("Akon saved that memory.");
       await refreshWorkspace(token);
     } catch (error) {
       setErrorMessage(formatErrorMessage(error));
@@ -655,538 +701,592 @@ function App() {
 
   if (isBootstrapping) {
     return (
-      <main className="app-shell boot-shell">
-        <div className="ambient-orb orb-one" />
-        <div className="ambient-orb orb-two" />
-        <section className="card boot-card">
-          <div className="pulse-dot" />
-          <h1>Opening your Akon space...</h1>
-          <p>Checking your session and preparing your companion workspace.</p>
+      <main className="boot-shell">
+        <section className="boot-card">
+          <div className="brand-mark">A</div>
+          <h1>Opening Akon</h1>
+          <p>Preparing your AI workspace.</p>
         </section>
       </main>
     );
   }
 
-  return (
-    <main className="app-shell">
-      <div className="ambient-orb orb-one" />
-      <div className="ambient-orb orb-two" />
-      <div className="ambient-orb orb-three" />
-
-      <section className="hero-panel">
-        <div className="hero-content">
-          <p className="eyebrow">Akon companion preview · v0.3.6</p>
-          <h1>A calm place to think, feel, and move forward.</h1>
-          <p className="hero-copy">
-            Akon is being shaped as a supportive AI companion that remembers with
-            permission, responds with care, and helps you turn heavy moments into
-            clear next steps.
-          </p>
-
-          <div className="hero-pills">
-            <span>Private by design</span>
-            <span>Memory with consent</span>
-            <span>Provider-aware UX</span>
-          </div>
-        </div>
-
-        <div className="companion-card">
-          <div className="companion-avatar">
-            <span>A</span>
-          </div>
-          <div>
-            <span className="soft-label">Current space</span>
-            <strong>{isAuthenticated ? "Akon is with you" : "Begin when ready"}</strong>
-            <small>{userLabel}</small>
-          </div>
-        </div>
-      </section>
-
-      {(errorMessage || statusMessage || isBusy) && (
-        <section className="feedback-row">
-          {errorMessage && <div className="alert error">{errorMessage}</div>}
-          {statusMessage && <div className="alert success">{statusMessage}</div>}
-          {isBusy && <div className="alert loading">Akon is gently updating things...</div>}
-        </section>
-      )}
-
-      {!isAuthenticated ? (
-        <section className="auth-layout">
-          <form className="card auth-card" onSubmit={handleAuthSubmit}>
-            <div className="card-header centered">
-              <p className="eyebrow">Your space</p>
-              <h2>{authMode === "login" ? "Welcome back" : "Create your Akon space"}</h2>
-              <p>
-                Sign in to continue your conversations, memories, and companion history.
-              </p>
+  if (!isAuthenticated) {
+    return (
+      <main className="public-shell">
+        <section className="public-hero">
+          <nav className="public-nav" aria-label="Product navigation">
+            <div className="brand-lockup">
+              <div className="brand-mark">A</div>
+              <div>
+                <strong>Akon</strong>
+                <span>AI Companion Platform</span>
+              </div>
             </div>
 
-            <label>
-              Email
-              <input
-                value={email}
-                type="email"
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
+            <button
+              className="ghost-button compact-button"
+              type="button"
+              onClick={() => setAuthMode("login")}
+            >
+              Sign in
+            </button>
+          </nav>
 
-            <label>
-              Password
-              <input
-                value={password}
-                type="password"
-                minLength={10}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-              />
-            </label>
+          <div className="public-grid">
+            <section className="public-copy">
+              <p className="eyebrow">Akon AI · v0.3.9</p>
+              <h1>Your intelligent companion for thought, work, learning, and life.</h1>
+              <p className="hero-copy">
+                Akon helps you think clearly, write better, learn faster, plan next
+                steps, reflect with care, and keep useful context under your control.
+              </p>
 
-            {authMode === "register" && (
+              <div className="hero-pills">
+                <span>Adaptive intelligence</span>
+                <span>Memory with consent</span>
+                <span>Private by design</span>
+                <span>Built for everyday life</span>
+              </div>
+            </section>
+
+            <form className="auth-card" onSubmit={handleAuthSubmit}>
+              <div className="card-header centered">
+                <p className="eyebrow">Your AI workspace</p>
+                <h2>
+                  {authMode === "login" ? "Welcome back" : "Create your Akon account"}
+                </h2>
+                <p>
+                  Continue your conversations, saved context, and personal AI workspace.
+                </p>
+              </div>
+
               <label>
-                Display name
+                Email
                 <input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
+                  value={email}
+                  type="email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
                 />
               </label>
+
+              <label>
+                Password
+                <input
+                  value={password}
+                  type="password"
+                  minLength={10}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </label>
+
+              {authMode === "register" && (
+                <label>
+                  Display name
+                  <input
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                  />
+                </label>
+              )}
+
+              <button disabled={isAuthLoading} type="submit">
+                {isAuthLoading
+                  ? "Preparing..."
+                  : authMode === "login"
+                    ? "Enter Akon"
+                    : "Create account"}
+              </button>
+
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() =>
+                  setAuthMode((current) => (current === "login" ? "register" : "login"))
+                }
+              >
+                {authMode === "login"
+                  ? "Create a new account"
+                  : "I already have an account"}
+              </button>
+            </form>
+          </div>
+        </section>
+
+        {(errorMessage || statusMessage || isBusy) && (
+          <section className="feedback-row public-feedback">
+            {errorMessage && <div className="alert error">{errorMessage}</div>}
+            {statusMessage && <div className="alert success">{statusMessage}</div>}
+            {isBusy && <div className="alert loading">Akon is preparing your workspace...</div>}
+          </section>
+        )}
+      </main>
+    );
+  }
+
+  return (
+    <main className="product-shell">
+      <aside className="app-sidebar">
+        <div className="sidebar-top">
+          <div className="brand-lockup">
+            <div className="brand-mark">A</div>
+            <div>
+              <strong>Akon</strong>
+              <span>AI Workspace</span>
+            </div>
+          </div>
+
+          <button className="new-chat-button" type="button" onClick={handleNewConversation}>
+            + New chat
+          </button>
+        </div>
+
+        <section className="sidebar-section">
+          <div className="sidebar-section-header">
+            <span>Recent chats</span>
+            {isWorkspaceLoading && <small>Syncing...</small>}
+          </div>
+
+          <div className="conversation-list">
+            {conversations.length === 0 ? (
+              <p className="empty-state">No chats yet.</p>
+            ) : (
+              conversations.map((conversation) => (
+                <button
+                  className={
+                    conversation.id === activeConversationId
+                      ? "conversation-item active"
+                      : "conversation-item"
+                  }
+                  key={conversation.id}
+                  type="button"
+                  aria-current={
+                    conversation.id === activeConversationId ? "true" : undefined
+                  }
+                  onClick={() => void handleConversationClick(conversation.id)}
+                >
+                  <strong>{conversation.title || "Untitled conversation"}</strong>
+                  <span>
+                    {conversation.safety_level || "Normal"} ·{" "}
+                    {formatConversationDate(conversation.created_at)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+
+        <div className="sidebar-footer">
+          <div className="user-chip">
+            <div className="user-avatar">{userLabel.slice(0, 1).toUpperCase()}</div>
+            <div>
+              <strong>{userLabel}</strong>
+              <span>{currentUser?.email}</span>
+            </div>
+          </div>
+
+          <button className="ghost-button compact-button" type="button" onClick={handleLogout}>
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      <section className="chat-workspace">
+        <header className="chat-topbar">
+          <div>
+            <p className="eyebrow">Akon AI</p>
+            <h1>{activeConversationTitle}</h1>
+          </div>
+
+          <div className="workspace-metrics" aria-label="Workspace metrics">
+            <span>{conversations.length} chats</span>
+            <span>{activeMemoryCount} memories</span>
+            <span>{auditLogs.length} activities</span>
+          </div>
+        </header>
+
+        {(errorMessage || statusMessage || isBusy) && (
+          <section className="feedback-row">
+            {errorMessage && <div className="alert error">{errorMessage}</div>}
+            {statusMessage && <div className="alert success">{statusMessage}</div>}
+            {isBusy && <div className="alert loading">Akon is updating your workspace...</div>}
+          </section>
+        )}
+
+        <section className="chat-surface">
+          <div className="message-list" ref={messageListRef}>
+            {openingConversationId ? (
+              <div className="empty-conversation loading-conversation">
+                <div className="pulse-dot" />
+                <p>Opening this conversation...</p>
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="empty-conversation pro-empty-state">
+                <div className="brand-mark large-brand-mark">A</div>
+                <h2>How can Akon help?</h2>
+                <p>
+                  Ask a question, draft something, study a topic, think through a
+                  decision, or organize your next move.
+                </p>
+
+                <div className="prompt-grid">
+                  {QUICK_START_PROMPTS.map((prompt) => (
+                    <button
+                      className="prompt-card"
+                      key={prompt}
+                      type="button"
+                      onClick={() => handleQuickPrompt(prompt)}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((message, index) => (
+                <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
+                  <strong>{message.role === "user" ? "You" : "Akon"}</strong>
+                  <p>{message.content}</p>
+                  <div className="message-meta">
+                    <time dateTime={message.createdAt}>
+                      {formatMessageTimestamp(message.createdAt)}
+                    </time>
+                    {message.safetyLevel && message.safetyLevel !== "S0" && (
+                      <span>Care level: {message.safetyLevel}</span>
+                    )}
+                  </div>
+                  {message.role === "assistant" &&
+                    message.detectedEmotion &&
+                    message.detectedEmotion !== "neutral" && (
+                      <small className="message-emotion">
+                        Akon sensed: {message.detectedEmotion}
+                      </small>
+                    )}
+                </article>
+              ))
             )}
 
-            <button disabled={isAuthLoading} type="submit">
-              {isAuthLoading
-                ? "Preparing..."
-                : authMode === "login"
-                  ? "Enter Akon"
-                  : "Create space and enter"}
-            </button>
+            {isChatLoading && (
+              <article className="message assistant thinking">
+                <strong>Akon</strong>
+                <p>Thinking...</p>
+              </article>
+            )}
+          </div>
 
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() =>
-                setAuthMode((current) => (current === "login" ? "register" : "login"))
-              }
-            >
-              {authMode === "login"
-                ? "I need to create an account"
-                : "I already have an account"}
+          <form className="chat-form" onSubmit={handleSendMessage}>
+            <textarea
+              value={chatInput}
+              placeholder="Message Akon..."
+              onChange={(event) => setChatInput(event.target.value)}
+              onKeyDown={handleChatInputKeyDown}
+            />
+            <button disabled={isChatLoading || !chatInput.trim()} type="submit">
+              {isChatLoading ? "Sending..." : "Send"}
             </button>
           </form>
         </section>
-      ) : (
-        <section className="workspace-grid">
-          <section className="card chat-card">
-            <div className="card-header horizontal">
-              <div>
-                <p className="eyebrow">Conversation</p>
-                <h2>Talk with Akon</h2>
-                <p>
-                  Say what is true. Akon will help you slow it down and sort it out.
-                </p>
-                {activeConversationId && (
-                  <small className="conversation-meta">
-                    Continuing conversation {activeConversationId.slice(0, 8)}...
-                  </small>
-                )}
-              </div>
+      </section>
 
-              <div className="header-actions">
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={handleNewConversation}
-                >
-                  New conversation
-                </button>
-                <button className="ghost-button" type="button" onClick={handleLogout}>
-                  Leave space
-                </button>
-              </div>
-            </div>
+      <aside className="context-panel">
+        <section className="context-card">
+          <div className="card-header">
+            <p className="eyebrow">Memory</p>
+            <h2>Personal context</h2>
+            <p>
+              Add preferences, goals, constraints, or background details so Akon becomes
+              more useful over time.
+            </p>
+          </div>
 
-            <div className="message-list" ref={messageListRef}>
-              {openingConversationId ? (
-                <div className="empty-conversation loading-conversation">
-                  <div className="pulse-dot" />
-                  <p>Bringing this conversation back into view...</p>
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="empty-conversation">
-                  <div className="pulse-dot" />
-                  <p>
-                    Start anywhere. Akon can sit with the messy first version and help
-                    you find the next clear step.
-                  </p>
-                </div>
-              ) : (
-                messages.map((message, index) => (
-                  <article className={`message ${message.role}`} key={`${message.role}-${index}`}>
-                    <strong>{message.role === "user" ? "You" : "Akon"}</strong>
-                    <p>{message.content}</p>
-                    <div className="message-meta">
-                      <time dateTime={message.createdAt}>
-                        {formatMessageTimestamp(message.createdAt)}
-                      </time>
-                      {message.safetyLevel && message.safetyLevel !== "S0" && (
-                        <span>Care level: {message.safetyLevel}</span>
-                      )}
-                    </div>
-                    {message.role === "assistant" &&
-                      message.detectedEmotion &&
-                      message.detectedEmotion !== "neutral" && (
-                        <small className="message-emotion">
-                          Akon sensed: {message.detectedEmotion}
-                        </small>
-                      )}
-                  </article>
-                ))
-              )}
+          <form className="stack-form" onSubmit={handleCreateMemory}>
+            <label>
+              Type
+              <select
+                value={memoryType}
+                onChange={(event) => setMemoryType(event.target.value)}
+              >
+                <option value="preference">Preference</option>
+                <option value="goal">Goal</option>
+                <option value="constraint">Constraint</option>
+                <option value="emotional_baseline">Emotional baseline</option>
+                <option value="cultural_context">Cultural context</option>
+              </select>
+            </label>
 
-              {isChatLoading && (
-                <article className="message assistant thinking">
-                  <strong>Akon</strong>
-                  <p>Thinking carefully...</p>
-                </article>
-              )}
-            </div>
-
-            <form className="chat-form" onSubmit={handleSendMessage}>
+            <label>
+              What should Akon remember?
               <textarea
-                value={chatInput}
-                placeholder="Tell Akon what is going on..."
-                onChange={(event) => setChatInput(event.target.value)}
-                onKeyDown={handleChatInputKeyDown}
+                value={memoryContent}
+                placeholder="Example: I prefer direct, step-by-step guidance when learning something difficult."
+                onChange={(event) => setMemoryContent(event.target.value)}
               />
-              <button disabled={isChatLoading || !chatInput.trim()} type="submit">
-                {isChatLoading ? "Sending..." : "Send"}
-              </button>
-            </form>
+            </label>
 
-            {memoryCandidates.length > 0 && (
-              <div className="candidate-box">
-                <div className="candidate-header">
-                  <div>
-                    <h3>Akon noticed something it could remember</h3>
-                    <p>
-                      Nothing is saved unless you approve it. Ignore anything that feels wrong.
-                    </p>
+            <button disabled={isMemoryLoading || !memoryContent.trim()} type="submit">
+              {isMemoryLoading ? "Saving..." : "Save memory"}
+            </button>
+          </form>
+        </section>
+
+        {memoryCandidates.length > 0 && (
+          <section className="context-card">
+            <div className="card-header">
+              <p className="eyebrow">Suggested memory</p>
+              <h2>Review before saving</h2>
+              <p>Nothing is saved unless you approve it.</p>
+            </div>
+
+            <div className="scroll-list">
+              {memoryCandidates.map((candidate, index) => (
+                <div
+                  className="mini-item warm candidate-card"
+                  key={`${candidate.memory_type}-${candidate.content}-${index}`}
+                >
+                  <strong>{candidate.memory_type}</strong>
+                  <p>{candidate.content}</p>
+                  <small>{candidate.reason}</small>
+
+                  <div className="candidate-actions">
+                    <button
+                      type="button"
+                      disabled={candidateActionIndex !== null}
+                      onClick={() => void handleApproveCandidate(candidate, index)}
+                    >
+                      {candidateActionIndex === index ? "Saving..." : "Approve"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={candidateActionIndex !== null}
+                      onClick={() => handleIgnoreCandidate(index)}
+                    >
+                      Ignore
+                    </button>
                   </div>
                 </div>
+              ))}
+            </div>
+          </section>
+        )}
 
-                {memoryCandidates.map((candidate, index) => (
-                  <div
-                    className="mini-item warm candidate-card"
-                    key={`${candidate.memory_type}-${candidate.content}-${index}`}
-                  >
-                    <strong>{candidate.memory_type}</strong>
-                    <p>{candidate.content}</p>
-                    <small>{candidate.reason}</small>
+        <section className="context-card">
+          <div className="card-header">
+            <p className="eyebrow">Saved memory</p>
+            <h2>{activeMemoryCount} active</h2>
+          </div>
 
-                    <div className="candidate-actions">
-                      <button
-                        type="button"
-                        disabled={candidateActionIndex !== null}
-                        onClick={() => void handleApproveCandidate(candidate, index)}
-                      >
-                        {candidateActionIndex === index ? "Saving..." : "Approve memory"}
-                      </button>
+          <div className="scroll-list memory-scroll-list">
+            {memories.length === 0 ? (
+              <p className="empty-state">No saved memory yet.</p>
+            ) : (
+              memories.map((memory) => {
+                const isEditing = memoryEditState?.id === memory.id;
+                const isActing = memoryActionId === memory.id;
+
+                if (isEditing && memoryEditState) {
+                  return (
+                    <form
+                      className="mini-item memory-edit-card"
+                      key={memory.id}
+                      onSubmit={handleSubmitMemoryEdit}
+                    >
+                      <label>
+                        Type
+                        <select
+                          value={memoryEditState.memoryType}
+                          onChange={(event) =>
+                            setMemoryEditState((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    memoryType: event.target.value,
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          <option value="preference">Preference</option>
+                          <option value="goal">Goal</option>
+                          <option value="constraint">Constraint</option>
+                          <option value="emotional_baseline">Emotional baseline</option>
+                          <option value="cultural_context">Cultural context</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Content
+                        <textarea
+                          value={memoryEditState.content}
+                          onChange={(event) =>
+                            setMemoryEditState((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    content: event.target.value,
+                                  }
+                                : current,
+                            )
+                          }
+                        />
+                      </label>
+
+                      <div className="memory-edit-grid">
+                        <label>
+                          Confidence
+                          <select
+                            value={memoryEditState.confidence}
+                            onChange={(event) =>
+                              setMemoryEditState((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      confidence: event.target.value,
+                                    }
+                                  : current,
+                              )
+                            }
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                        </label>
+
+                        <label>
+                          Sensitivity
+                          <select
+                            value={memoryEditState.sensitivity}
+                            onChange={(event) =>
+                              setMemoryEditState((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      sensitivity: event.target.value,
+                                    }
+                                  : current,
+                              )
+                            }
+                          >
+                            <option value="low">Low</option>
+                            <option value="high">High</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <label>
+                        Consent state
+                        <select
+                          value={memoryEditState.consentState}
+                          onChange={(event) =>
+                            setMemoryEditState((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    consentState: event.target.value,
+                                  }
+                                : current,
+                            )
+                          }
+                        >
+                          <option value="explicit">Explicit</option>
+                          <option value="implicit">Implicit</option>
+                          <option value="revoked">Revoked</option>
+                        </select>
+                      </label>
+
+                      <div className="memory-actions">
+                        <button disabled={isActing} type="submit">
+                          {isActing ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          className="ghost-button"
+                          disabled={isActing}
+                          type="button"
+                          onClick={handleCancelEditMemory}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  );
+                }
+
+                return (
+                  <div className="mini-item memory-item-card" key={memory.id}>
+                    <div className="memory-item-header">
+                      <strong>{memory.memory_type}</strong>
+                      <span className={`memory-consent ${memory.consent_state}`}>
+                        {memory.consent_state}
+                      </span>
+                    </div>
+
+                    <p>{memory.content}</p>
+                    <small>
+                      {memory.confidence} · {memory.sensitivity} ·{" "}
+                      {memory.source || "manual"}
+                    </small>
+
+                    <div className="memory-actions">
                       <button
                         className="ghost-button"
+                        disabled={Boolean(memoryActionId)}
                         type="button"
-                        disabled={candidateActionIndex !== null}
-                        onClick={() => handleIgnoreCandidate(index)}
+                        onClick={() => handleBeginEditMemory(memory)}
                       >
-                        Ignore
+                        Edit
+                      </button>
+
+                      {memory.consent_state !== "revoked" && (
+                        <button
+                          className="ghost-button"
+                          disabled={Boolean(memoryActionId)}
+                          type="button"
+                          onClick={() => void handleRevokeMemory(memory)}
+                        >
+                          {isActing ? "Revoking..." : "Revoke"}
+                        </button>
+                      )}
+
+                      <button
+                        className="danger-button"
+                        disabled={Boolean(memoryActionId)}
+                        type="button"
+                        onClick={() => void handleDeleteMemory(memory)}
+                      >
+                        {isActing ? "Deleting..." : "Delete"}
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })
             )}
-          </section>
-
-          <aside className="side-stack">
-            <section className="card glow-card">
-              <div className="card-header">
-                <p className="eyebrow">Understanding</p>
-                <h2>What Akon knows</h2>
-                <p>You can edit, revoke, or delete anything Akon remembers.</p>
-              </div>
-
-              <form className="stack-form" onSubmit={handleCreateMemory}>
-                <label>
-                  Kind of understanding
-                  <select
-                    value={memoryType}
-                    onChange={(event) => setMemoryType(event.target.value)}
-                  >
-                    <option value="preference">Preference</option>
-                    <option value="goal">Goal</option>
-                    <option value="constraint">Constraint</option>
-                    <option value="emotional_baseline">Emotional baseline</option>
-                    <option value="cultural_context">Cultural context</option>
-                  </select>
-                </label>
-
-                <label>
-                  What should Akon remember?
-                  <textarea
-                    value={memoryContent}
-                    placeholder="Example: I prefer direct, step-by-step guidance when I feel stuck."
-                    onChange={(event) => setMemoryContent(event.target.value)}
-                  />
-                </label>
-
-                <button disabled={isMemoryLoading || !memoryContent.trim()} type="submit">
-                  {isMemoryLoading ? "Saving..." : "Save understanding"}
-                </button>
-              </form>
-
-              <div className="scroll-list memory-scroll-list">
-                {memories.length === 0 ? (
-                  <p className="empty-state">No saved understanding yet.</p>
-                ) : (
-                  memories.map((memory) => {
-                    const isEditing = memoryEditState?.id === memory.id;
-                    const isActing = memoryActionId === memory.id;
-
-                    if (isEditing && memoryEditState) {
-                      return (
-                        <form
-                          className="mini-item memory-edit-card"
-                          key={memory.id}
-                          onSubmit={handleSubmitMemoryEdit}
-                        >
-                          <label>
-                            Type
-                            <select
-                              value={memoryEditState.memoryType}
-                              onChange={(event) =>
-                                setMemoryEditState((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        memoryType: event.target.value,
-                                      }
-                                    : current,
-                                )
-                              }
-                            >
-                              <option value="preference">Preference</option>
-                              <option value="goal">Goal</option>
-                              <option value="constraint">Constraint</option>
-                              <option value="emotional_baseline">Emotional baseline</option>
-                              <option value="cultural_context">Cultural context</option>
-                            </select>
-                          </label>
-
-                          <label>
-                            Content
-                            <textarea
-                              value={memoryEditState.content}
-                              onChange={(event) =>
-                                setMemoryEditState((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        content: event.target.value,
-                                      }
-                                    : current,
-                                )
-                              }
-                            />
-                          </label>
-
-                          <div className="memory-edit-grid">
-                            <label>
-                              Confidence
-                              <select
-                                value={memoryEditState.confidence}
-                                onChange={(event) =>
-                                  setMemoryEditState((current) =>
-                                    current
-                                      ? {
-                                          ...current,
-                                          confidence: event.target.value,
-                                        }
-                                      : current,
-                                  )
-                                }
-                              >
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                              </select>
-                            </label>
-
-                            <label>
-                              Sensitivity
-                              <select
-                                value={memoryEditState.sensitivity}
-                                onChange={(event) =>
-                                  setMemoryEditState((current) =>
-                                    current
-                                      ? {
-                                          ...current,
-                                          sensitivity: event.target.value,
-                                        }
-                                      : current,
-                                  )
-                                }
-                              >
-                                <option value="low">Low</option>
-                                <option value="high">High</option>
-                              </select>
-                            </label>
-                          </div>
-
-                          <label>
-                            Consent state
-                            <select
-                              value={memoryEditState.consentState}
-                              onChange={(event) =>
-                                setMemoryEditState((current) =>
-                                  current
-                                    ? {
-                                        ...current,
-                                        consentState: event.target.value,
-                                      }
-                                    : current,
-                                )
-                              }
-                            >
-                              <option value="explicit">Explicit</option>
-                              <option value="implicit">Implicit</option>
-                              <option value="revoked">Revoked</option>
-                            </select>
-                          </label>
-
-                          <div className="memory-actions">
-                            <button disabled={isActing} type="submit">
-                              {isActing ? "Saving..." : "Save changes"}
-                            </button>
-                            <button
-                              className="ghost-button"
-                              disabled={isActing}
-                              type="button"
-                              onClick={handleCancelEditMemory}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </form>
-                      );
-                    }
-
-                    return (
-                      <div className="mini-item memory-item-card" key={memory.id}>
-                        <div className="memory-item-header">
-                          <strong>{memory.memory_type}</strong>
-                          <span className={`memory-consent ${memory.consent_state}`}>
-                            {memory.consent_state}
-                          </span>
-                        </div>
-
-                        <p>{memory.content}</p>
-                        <small>
-                          {memory.confidence} · {memory.sensitivity} · {memory.source || "manual"}
-                        </small>
-
-                        <div className="memory-actions">
-                          <button
-                            className="ghost-button"
-                            disabled={Boolean(memoryActionId)}
-                            type="button"
-                            onClick={() => handleBeginEditMemory(memory)}
-                          >
-                            Edit
-                          </button>
-
-                          {memory.consent_state !== "revoked" && (
-                            <button
-                              className="ghost-button"
-                              disabled={Boolean(memoryActionId)}
-                              type="button"
-                              onClick={() => void handleRevokeMemory(memory)}
-                            >
-                              {isActing ? "Revoking..." : "Revoke"}
-                            </button>
-                          )}
-
-                          <button
-                            className="danger-button"
-                            disabled={Boolean(memoryActionId)}
-                            type="button"
-                            onClick={() => void handleDeleteMemory(memory)}
-                          >
-                            {isActing ? "Deleting..." : "Delete"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="card-header">
-                <p className="eyebrow">Journey</p>
-                <h2>Recent conversations</h2>
-              </div>
-
-              <div className="scroll-list">
-                {conversations.length === 0 ? (
-                  <p className="empty-state">Your conversation journey starts here.</p>
-                ) : (
-                  conversations.map((conversation) => (
-                    <button
-                      className={
-                        conversation.id === activeConversationId
-                          ? "list-button active"
-                          : "list-button"
-                      }
-                      key={conversation.id}
-                      type="button"
-                      aria-current={
-                        conversation.id === activeConversationId ? "true" : undefined
-                      }
-                      onClick={() => void handleConversationClick(conversation.id)}
-                    >
-                      <strong>{conversation.title || "Untitled conversation"}</strong>
-                      <small>
-                        {conversation.id === activeConversationId ? "Open now - " : ""}
-                        {conversation.safety_level || "No care level"}
-                      </small>
-                    </button>
-                  ))
-                )}
-              </div>
-            </section>
-
-            <section className="card">
-              <div className="card-header">
-                <p className="eyebrow">Trust trail</p>
-                <h2>Recent activity</h2>
-              </div>
-
-              <div className="scroll-list">
-                {auditLogs.length === 0 ? (
-                  <p className="empty-state">No activity yet.</p>
-                ) : (
-                  auditLogs.slice(0, 10).map((auditLog) => (
-                    <div className="mini-item" key={auditLog.id}>
-                      <strong>{auditLog.action}</strong>
-                      <p>{auditLog.entity_type}</p>
-                      <small>{auditLog.risk_level}</small>
-                    </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </aside>
+          </div>
         </section>
-      )}
+
+        <section className="context-card compact-context-card">
+          <div className="card-header">
+            <p className="eyebrow">Trust</p>
+            <h2>Recent activity</h2>
+          </div>
+
+          <div className="scroll-list trust-list">
+            {auditLogs.length === 0 ? (
+              <p className="empty-state">No activity yet.</p>
+            ) : (
+              auditLogs.slice(0, 8).map((auditLog) => (
+                <div className="mini-item" key={auditLog.id}>
+                  <strong>{auditLog.action}</strong>
+                  <p>{auditLog.entity_type}</p>
+                  <small>{auditLog.risk_level}</small>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+      </aside>
     </main>
   );
 }
