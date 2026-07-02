@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
+import ChatComposer from "./components/ChatComposer";
 import MessageContent from "./components/MessageContent";
 import "./App.css";
 import {
@@ -197,6 +198,7 @@ function getLastUserMessage(messages: ChatMessage[]): ChatMessage | undefined {
 function App() {
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const conversationOpenRequestRef = useRef(0);
+  const chatRequestIdRef = useRef(0);
 
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
@@ -652,12 +654,19 @@ function App() {
     setConversationReflection(null);
     setIsChatLoading(true);
 
+    const requestId = chatRequestIdRef.current + 1;
+    chatRequestIdRef.current = requestId;
+
     try {
       const response: ChatResponse = await sendChatMessage(
         token,
         trimmedMessage,
         activeConversationId,
       );
+
+      if (chatRequestIdRef.current !== requestId) {
+        return;
+      }
 
       setActiveConversationId(response.conversation_id);
       storeActiveConversationId(response.conversation_id);
@@ -679,6 +688,10 @@ function App() {
 
       await refreshWorkspace(token);
     } catch (error) {
+      if (chatRequestIdRef.current !== requestId) {
+        return;
+      }
+
       const chatFailureMessage = buildChatFailureMessage(error);
 
       if (isAiProviderUnavailableError(error)) {
@@ -695,7 +708,9 @@ function App() {
         setErrorMessage(chatFailureMessage);
       }
     } finally {
-      setIsChatLoading(false);
+      if (chatRequestIdRef.current === requestId) {
+        setIsChatLoading(false);
+      }
     }
   }
 
@@ -704,6 +719,16 @@ function App() {
     resetFeedback();
 
     await sendMessageText(chatInput);
+  }
+
+  function handleStopGenerating() {
+    if (!isChatLoading) {
+      return;
+    }
+
+    chatRequestIdRef.current += 1;
+    setIsChatLoading(false);
+    setStatusMessage("Generation stopped. You can send a new message.");
   }
 
   async function handleRetryLastUserMessage() {
@@ -992,7 +1017,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.2</p>
+              <p className="eyebrow">Akon AI - v0.4.3</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -1418,17 +1443,14 @@ function App() {
             )}
           </div>
 
-          <form className="chat-form" onSubmit={handleSendMessage}>
-            <textarea
-              value={chatInput}
-              placeholder="Message Akon..."
-              onChange={(event) => setChatInput(event.target.value)}
-              onKeyDown={handleChatInputKeyDown}
-            />
-            <button disabled={isChatLoading || !chatInput.trim()} type="submit">
-              {isChatLoading ? "Sending..." : "Send"}
-            </button>
-          </form>
+          <ChatComposer
+            value={chatInput}
+            isLoading={isChatLoading}
+            onChange={setChatInput}
+            onSubmit={handleSendMessage}
+            onStop={handleStopGenerating}
+            onKeyDown={handleChatInputKeyDown}
+          />
         </section>
       </section>
 
