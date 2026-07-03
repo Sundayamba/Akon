@@ -17,6 +17,7 @@ import {
   getCurrentUser,
   getStoredAccessToken,
   isAiProviderUnavailableError,
+  isRequestAbortedError,
   listAuditLogs,
   listConversations,
   listMemories,
@@ -204,6 +205,8 @@ function App() {
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const conversationOpenRequestRef = useRef(0);
   const chatRequestIdRef = useRef(0);
+  const conversationAbortControllerRef = useRef<AbortController | null>(null);
+  const chatAbortControllerRef = useRef<AbortController | null>(null);
 
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
@@ -253,6 +256,7 @@ function App() {
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatActivityLabel, setChatActivityLabel] = useState<string | null>(null);
   const [isMemoryLoading, setIsMemoryLoading] = useState(false);
   const [isReflectionLoading, setIsReflectionLoading] = useState(false);
   const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
@@ -327,8 +331,25 @@ function App() {
 
   function cancelPendingConversationOpen() {
     conversationOpenRequestRef.current += 1;
+    conversationAbortControllerRef.current?.abort();
+    conversationAbortControllerRef.current = null;
     setOpeningConversationId(null);
     setIsWorkspaceLoading(false);
+  }
+
+  function clearActiveChatController(requestId: number) {
+    if (chatRequestIdRef.current === requestId) {
+      chatAbortControllerRef.current = null;
+    }
+  }
+
+  function cancelActiveChatRequest(status = "Generation stopped. You can send a new message.") {
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
+    chatRequestIdRef.current += 1;
+    setIsChatLoading(false);
+    setChatActivityLabel(null);
+    setStatusMessage(status);
   }
 
   useEffect(() => {
@@ -422,6 +443,11 @@ function App() {
     const requestId = conversationOpenRequestRef.current + 1;
     conversationOpenRequestRef.current = requestId;
 
+    conversationAbortControllerRef.current?.abort();
+
+    const abortController = new AbortController();
+    conversationAbortControllerRef.current = abortController;
+
     setIsWorkspaceLoading(true);
     setOpeningConversationId(conversationId);
     setActiveConversationId(conversationId);
@@ -433,7 +459,11 @@ function App() {
     resetFeedback();
 
     try {
-      const conversation = await getConversation(authToken, conversationId);
+      const conversation = await getConversation(
+        authToken,
+        conversationId,
+        abortController.signal,
+      );
 
       if (conversationOpenRequestRef.current !== requestId) {
         return;
@@ -450,7 +480,10 @@ function App() {
         setStatusMessage("Conversation reopened.");
       }
     } catch (error) {
-      if (conversationOpenRequestRef.current !== requestId) {
+      if (
+        conversationOpenRequestRef.current !== requestId ||
+        isRequestAbortedError(error)
+      ) {
         return;
       }
 
@@ -459,6 +492,7 @@ function App() {
       setErrorMessage(formatErrorMessage(error));
     } finally {
       if (conversationOpenRequestRef.current === requestId) {
+        conversationAbortControllerRef.current = null;
         setOpeningConversationId(null);
         setIsWorkspaceLoading(false);
       }
@@ -472,6 +506,11 @@ function App() {
 
   function resetAuthenticatedState() {
     cancelPendingConversationOpen();
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
+    chatRequestIdRef.current += 1;
+    setIsChatLoading(false);
+    setChatActivityLabel(null);
     clearStoredAccessToken();
     clearActiveConversationId();
     setToken(null);
@@ -550,6 +589,11 @@ function App() {
 
   function handleNewConversation() {
     cancelPendingConversationOpen();
+    chatAbortControllerRef.current?.abort();
+    chatAbortControllerRef.current = null;
+    chatRequestIdRef.current += 1;
+    setIsChatLoading(false);
+    setChatActivityLabel(null);
     clearActiveConversationId();
     setActiveConversationId(undefined);
     setMessages([]);
@@ -668,7 +712,10 @@ function App() {
     }
   }
 
-  async function sendMessageText(messageText: string) {
+  async function sendMessageText(
+    messageText: string,
+    activityLabel = "Thinking",
+  ) {
     if (!token || !messageText.trim() || isChatLoading) {
       return;
     }
@@ -687,15 +734,22 @@ function App() {
     setFeedbackNoteMessageId(null);
     setFeedbackNoteInput("");
     setIsChatLoading(true);
+    setChatActivityLabel(activityLabel);
 
     const requestId = chatRequestIdRef.current + 1;
     chatRequestIdRef.current = requestId;
+
+    chatAbortControllerRef.current?.abort();
+
+    const abortController = new AbortController();
+    chatAbortControllerRef.current = abortController;
 
     try {
       const response: ChatResponse = await sendChatMessage(
         token,
         trimmedMessage,
         activeConversationId,
+        abortController.signal,
       );
 
       if (chatRequestIdRef.current !== requestId) {
@@ -722,7 +776,10 @@ function App() {
 
       await refreshWorkspace(token);
     } catch (error) {
-      if (chatRequestIdRef.current !== requestId) {
+      if (
+        chatRequestIdRef.current !== requestId ||
+        isRequestAbortedError(error)
+      ) {
         return;
       }
 
@@ -742,8 +799,11 @@ function App() {
         setErrorMessage(chatFailureMessage);
       }
     } finally {
+      clearActiveChatController(requestId);
+
       if (chatRequestIdRef.current === requestId) {
         setIsChatLoading(false);
+        setChatActivityLabel(null);
       }
     }
   }
@@ -752,7 +812,7 @@ function App() {
     event.preventDefault();
     resetFeedback();
 
-    await sendMessageText(chatInput);
+    await sendMessageText(chatInput, "Thinking");
   }
 
   function handleStopGenerating() {
@@ -760,9 +820,7 @@ function App() {
       return;
     }
 
-    chatRequestIdRef.current += 1;
-    setIsChatLoading(false);
-    setStatusMessage("Generation stopped. You can send a new message.");
+    cancelActiveChatRequest();
   }
 
   async function handleRetryLastUserMessage() {
@@ -774,7 +832,7 @@ function App() {
     }
 
     resetFeedback();
-    await sendMessageText(lastUserMessage.content);
+    await sendMessageText(lastUserMessage.content, "Retrying");
   }
 
   async function handleRegenerateAssistantMessage(message: ChatMessage) {
@@ -787,12 +845,22 @@ function App() {
     setFeedbackNoteMessageId(null);
     setFeedbackNoteInput("");
     setIsChatLoading(true);
+    setChatActivityLabel("Regenerating");
 
     const requestId = chatRequestIdRef.current + 1;
     chatRequestIdRef.current = requestId;
 
+    chatAbortControllerRef.current?.abort();
+
+    const abortController = new AbortController();
+    chatAbortControllerRef.current = abortController;
+
     try {
-      const response = await regenerateAssistantReply(token, message.id);
+      const response = await regenerateAssistantReply(
+        token,
+        message.id,
+        abortController.signal,
+      );
 
       if (chatRequestIdRef.current !== requestId) {
         return;
@@ -818,21 +886,27 @@ function App() {
       setStatusMessage("Akon regenerated that reply.");
       await refreshWorkspace(token);
     } catch (error) {
-      if (chatRequestIdRef.current !== requestId) {
+      if (
+        chatRequestIdRef.current !== requestId ||
+        isRequestAbortedError(error)
+      ) {
         return;
       }
 
       setErrorMessage(formatErrorMessage(error));
     } finally {
+      clearActiveChatController(requestId);
+
       if (chatRequestIdRef.current === requestId) {
         setIsChatLoading(false);
+        setChatActivityLabel(null);
       }
     }
   }
 
   async function handleContinueResponse() {
     resetFeedback();
-    await sendMessageText(CONTINUE_RESPONSE_PROMPT);
+    await sendMessageText(CONTINUE_RESPONSE_PROMPT, "Continuing");
   }
 
   function handleBeginNotHelpfulFeedback(messageId: string) {
@@ -1152,7 +1226,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.6</p>
+              <p className="eyebrow">Akon AI - v0.4.9</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -1362,7 +1436,7 @@ function App() {
                         title="Rename"
                         onClick={() => handleBeginRenameConversation(conversation)}
                       >
-                        ✎
+                        {"\u270e"}
                       </button>
                       <button
                         className="conversation-action-button danger"
@@ -1372,7 +1446,7 @@ function App() {
                         title="Delete"
                         onClick={() => void handleDeleteConversation(conversation)}
                       >
-                        {isActing ? "…" : "×"}
+                        {isActing ? "\u2026" : "\u00d7"}
                       </button>
                     </div>
                   </div>
@@ -1452,7 +1526,7 @@ function App() {
               type="button"
               onClick={() => void handleRetryLastUserMessage()}
             >
-              ↻
+              {"\u21bb"}
             </button>
           </div>
         </header>
@@ -1535,7 +1609,7 @@ function App() {
                             title="Copy"
                             onClick={() => void handleCopyMessage(messageKey, message.content)}
                           >
-                            {copiedMessageKey === messageKey ? "✓" : "⧉"}
+                            {copiedMessageKey === messageKey ? "\u2713" : "\u29c9"}
                           </button>
 
                           <button
@@ -1545,7 +1619,7 @@ function App() {
                             title="Share"
                             onClick={() => void handleShareMessage(message.content)}
                           >
-                            ↗
+                            {"\u2197"}
                           </button>
 
                           {canUseAssistantActions && (
@@ -1558,7 +1632,7 @@ function App() {
                                 title="Regenerate"
                                 onClick={() => void handleRegenerateAssistantMessage(message)}
                               >
-                                ↻
+                                {"\u21bb"}
                               </button>
 
                               <button
@@ -1569,7 +1643,7 @@ function App() {
                                 title="Continue"
                                 onClick={() => void handleContinueResponse()}
                               >
-                                ↪
+                                {"\u21aa"}
                               </button>
                             </>
                           )}
@@ -1581,7 +1655,7 @@ function App() {
                             title="More"
                             onClick={handleMoreMessageAction}
                           >
-                            ⋯
+                            {"\u22ef"}
                           </button>
                         </div>
                       </div>
@@ -1630,7 +1704,7 @@ function App() {
                                 void handleSubmitFeedback(message.id as string, "helpful")
                               }
                             >
-                              👍
+                              {"\u{1F44D}"}
                             </button>
 
                             <button
@@ -1647,7 +1721,7 @@ function App() {
                                 handleBeginNotHelpfulFeedback(message.id as string)
                               }
                             >
-                              👎
+                              {"\u{1F44E}"}
                             </button>
                           </div>
 
@@ -1704,7 +1778,7 @@ function App() {
             {isChatLoading && (
               <article className="message assistant thinking">
                 <strong>Akon</strong>
-                <p>Thinking...</p>
+                <p>{chatActivityLabel || "Thinking"}...</p>
               </article>
             )}
           </div>
@@ -1712,6 +1786,7 @@ function App() {
           <ChatComposer
             value={chatInput}
             isLoading={isChatLoading}
+            activityLabel={chatActivityLabel}
             onChange={setChatInput}
             onSubmit={handleSendMessage}
             onStop={handleStopGenerating}

@@ -27,6 +27,8 @@ export const AI_PROVIDER_UNAVAILABLE_MESSAGE =
 export const NETWORK_UNAVAILABLE_MESSAGE =
   "Akon could not connect to the server. Please check your connection and try again.";
 
+export const ABORTED_REQUEST_MESSAGE = "Request cancelled.";
+
 export class ApiRequestError extends Error {
   status: number;
   code?: string;
@@ -60,12 +62,20 @@ export function isAiProviderUnavailableError(error: unknown): boolean {
   return isApiRequestError(error) && error.status === 503;
 }
 
+export function isRequestAbortedError(error: unknown): boolean {
+  return isApiRequestError(error) && error.code === "request_aborted";
+}
+
 export function getApiErrorMessage(
   error: unknown,
   fallbackMessage = "Something went wrong. Please try again.",
 ): string {
   if (isAiProviderUnavailableError(error)) {
     return AI_PROVIDER_UNAVAILABLE_MESSAGE;
+  }
+
+  if (isRequestAbortedError(error)) {
+    return ABORTED_REQUEST_MESSAGE;
   }
 
   if (isApiRequestError(error)) {
@@ -145,6 +155,7 @@ type ApiRequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   token?: string | null;
   body?: unknown;
+  signal?: AbortSignal;
 };
 
 export async function apiRequest<T>(
@@ -170,8 +181,19 @@ export async function apiRequest<T>(
       method: options.method || "GET",
       headers,
       body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: options.signal,
     });
   } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiRequestError({
+        message: ABORTED_REQUEST_MESSAGE,
+        status: 0,
+        code: "request_aborted",
+        details: error,
+        isRetryable: false,
+      });
+    }
+
     throw new ApiRequestError({
       message: NETWORK_UNAVAILABLE_MESSAGE,
       status: 0,
@@ -215,10 +237,12 @@ export async function sendChatMessage(
   token: string,
   message: string,
   conversationId?: string,
+  signal?: AbortSignal,
 ): Promise<ChatResponse> {
   return apiRequest<ChatResponse>("/chat/message", {
     method: "POST",
     token,
+    signal,
     body: {
       message,
       conversation_id: conversationId || null,
@@ -229,10 +253,12 @@ export async function sendChatMessage(
 export async function regenerateAssistantReply(
   token: string,
   messageId: string,
+  signal?: AbortSignal,
 ): Promise<ChatResponse> {
   return apiRequest<ChatResponse>(`/chat/messages/${messageId}/regenerate`, {
     method: "POST",
     token,
+    signal,
   });
 }
 
@@ -276,9 +302,11 @@ export async function listConversations(
 export async function getConversation(
   token: string,
   conversationId: string,
+  signal?: AbortSignal,
 ): Promise<ConversationDetail> {
   return apiRequest<ConversationDetail>(`/chat/conversations/${conversationId}`, {
     token,
+    signal,
   });
 }
 

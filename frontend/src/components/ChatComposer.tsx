@@ -5,6 +5,7 @@ import "./ChatComposer.css";
 type ChatComposerProps = {
   value: string;
   isLoading: boolean;
+  activityLabel?: string | null;
   onChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onStop: () => void;
@@ -25,6 +26,7 @@ function resizeTextarea(textarea: HTMLTextAreaElement | null): void {
 function ChatComposer({
   value,
   isLoading,
+  activityLabel,
   onChange,
   onSubmit,
   onStop,
@@ -58,12 +60,16 @@ function ChatComposer({
           type="submit"
           title="Send"
         >
-          ↑
+          {"\u2191"}
         </button>
       </div>
 
       <div className="composer-meta-row">
-        <span>Enter to send · Shift + Enter for new line</span>
+        <span>
+          {isLoading
+            ? `${activityLabel || "Akon is responding"}...`
+            : "Enter to send - Shift + Enter for new line"}
+        </span>
 
         {isLoading && (
           <button className="composer-stop-button" type="button" onClick={onStop}>
