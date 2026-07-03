@@ -1,43 +1,45 @@
 .chat-composer {
   border-top: 1px solid rgba(15, 23, 42, 0.08);
   background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.68), rgba(255, 255, 255, 0.94)),
-    rgba(255, 255, 255, 0.88);
-  padding: 0.95rem clamp(1rem, 4vw, 4rem);
+    linear-gradient(180deg, rgba(248, 250, 252, 0.5), rgba(255, 255, 255, 0.96)),
+    rgba(255, 255, 255, 0.9);
+  padding: 0.72rem clamp(0.85rem, 3vw, 2.25rem) 0.65rem;
   backdrop-filter: blur(16px);
 }
 
 .composer-input-shell {
+  position: relative;
   display: grid;
-  gap: 0.65rem;
+  width: min(100%, 52rem);
+  margin: 0 auto;
   border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.94);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.96);
   box-shadow:
-    0 16px 38px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  padding: 0.75rem;
+    0 10px 28px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94);
 }
 
 .composer-input-shell:focus-within {
-  border-color: rgba(79, 70, 229, 0.45);
+  border-color: rgba(79, 70, 229, 0.42);
   box-shadow:
     0 0 0 4px rgba(79, 70, 229, 0.1),
-    0 16px 38px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    0 12px 30px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.94);
 }
 
 .composer-input-shell textarea {
-  min-height: 2.7rem;
-  max-height: 12rem;
+  min-height: 2.75rem;
+  max-height: 8.25rem;
   overflow-y: auto;
   border: 0;
-  border-radius: 18px;
+  border-radius: 22px;
   background: transparent;
   box-shadow: none;
   color: #111827;
-  line-height: 1.65;
-  padding: 0.55rem 0.65rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  padding: 0.72rem 3.35rem 0.72rem 1rem;
   resize: none;
 }
 
@@ -51,66 +53,73 @@
   opacity: 0.72;
 }
 
-.composer-footer {
+.composer-send-button {
+  position: absolute;
+  right: 0.48rem;
+  bottom: 0.42rem;
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #111827, #4f46e5);
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 1000;
+  line-height: 1;
+  padding: 0;
+  box-shadow: 0 10px 22px rgba(79, 70, 229, 0.2);
+}
+
+.composer-send-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(79, 70, 229, 0.24);
+}
+
+.composer-meta-row {
   display: flex;
+  width: min(100%, 52rem);
   justify-content: space-between;
   gap: 0.75rem;
   align-items: center;
-}
-
-.composer-helper {
+  margin: 0.38rem auto 0;
   color: #94a3b8;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 720;
 }
 
-.composer-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.composer-actions button {
-  min-width: 5.4rem;
-  padding: 0.66rem 0.92rem;
-}
-
-.stop-button {
+.composer-stop-button {
   border: 1px solid rgba(220, 38, 38, 0.18);
   background: rgba(254, 226, 226, 0.9);
   color: #991b1b;
+  font-size: 0.76rem;
+  padding: 0.42rem 0.68rem;
   box-shadow: none;
 }
 
-.stop-button:hover {
-  box-shadow: 0 12px 28px rgba(220, 38, 38, 0.12);
+.composer-stop-button:hover {
+  box-shadow: 0 10px 24px rgba(220, 38, 38, 0.12);
 }
 
 @media (max-width: 900px) {
   .chat-composer {
     position: sticky;
     bottom: 0;
-    padding: 0.85rem 1rem;
+    padding: 0.72rem 0.85rem 0.65rem;
   }
 }
 
 @media (max-width: 620px) {
-  .composer-footer {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .composer-helper {
+  .composer-meta-row {
+    justify-content: center;
     text-align: center;
   }
 
-  .composer-actions {
-    display: grid;
-    grid-template-columns: 1fr;
+  .composer-meta-row span {
+    display: none;
   }
 
-  .composer-actions button {
+  .composer-stop-button {
     width: 100%;
   }
 }

@@ -11,7 +11,7 @@ type ChatComposerProps = {
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 };
 
-const MAX_TEXTAREA_HEIGHT = 192;
+const MAX_TEXTAREA_HEIGHT = 132;
 
 function resizeTextarea(textarea: HTMLTextAreaElement | null): void {
   if (!textarea) {
@@ -51,27 +51,25 @@ function ChatComposer({
           onKeyDown={onKeyDown}
         />
 
-        <div className="composer-footer">
-          <span className="composer-helper">
-            Enter to send · Shift + Enter for a new line
-          </span>
+        <button
+          className="composer-send-button"
+          aria-label="Send message"
+          disabled={isLoading || !hasText}
+          type="submit"
+          title="Send"
+        >
+          ↑
+        </button>
+      </div>
 
-          <div className="composer-actions">
-            {isLoading && (
-              <button
-                className="stop-button"
-                type="button"
-                onClick={onStop}
-              >
-                Stop
-              </button>
-            )}
+      <div className="composer-meta-row">
+        <span>Enter to send · Shift + Enter for new line</span>
 
-            <button disabled={isLoading || !hasText} type="submit">
-              {isLoading ? "Sending..." : "Send"}
-            </button>
-          </div>
-        </div>
+        {isLoading && (
+          <button className="composer-stop-button" type="button" onClick={onStop}>
+            Stop
+          </button>
+        )}
       </div>
     </form>
   );

@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import ChatComposer from "./components/ChatComposer";
 import MessageContent from "./components/MessageContent";
 import "./App.css";
+import "./components/WorkspacePolish.css";
 import {
   AUTH_EXPIRED_EVENT,
   ApiRequestError,
@@ -246,6 +247,9 @@ function App() {
   );
   const [feedbackNoteInput, setFeedbackNoteInput] = useState("");
 
+  const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
+  const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
+
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -271,6 +275,14 @@ function App() {
     conversationActionId !== null ||
     feedbackActionMessageId !== null ||
     memoryActionId !== null;
+
+  const shellClassName = [
+    "product-shell",
+    isHistoryPanelOpen ? "" : "history-collapsed",
+    isContextPanelOpen ? "" : "context-collapsed",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const userLabel = useMemo(() => {
     if (!currentUser) {
@@ -432,6 +444,7 @@ function App() {
       setMessages(mapConversationToMessages(conversation));
       setMemoryCandidates([]);
       setConversationReflection(null);
+      setIsHistoryPanelOpen(false);
 
       if (shouldSetStatus) {
         setStatusMessage("Conversation reopened.");
@@ -478,6 +491,8 @@ function App() {
     setOpeningConversationId(null);
     setFeedbackNoteMessageId(null);
     setFeedbackNoteInput("");
+    setIsHistoryPanelOpen(false);
+    setIsContextPanelOpen(false);
   }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
@@ -515,6 +530,8 @@ function App() {
       setConversationActionId(null);
       setFeedbackNoteMessageId(null);
       setFeedbackNoteInput("");
+      setIsHistoryPanelOpen(false);
+      setIsContextPanelOpen(false);
 
       await refreshWorkspace(login.access_token);
 
@@ -543,6 +560,7 @@ function App() {
     setFeedbackNoteMessageId(null);
     setFeedbackNoteInput("");
     setChatInput("");
+    setIsHistoryPanelOpen(false);
     setStatusMessage("New chat started.");
   }
 
@@ -897,7 +915,7 @@ function App() {
     try {
       await navigator.clipboard.writeText(content);
       setCopiedMessageKey(messageKey);
-      setStatusMessage("Message copied.");
+      setStatusMessage("Copied.");
 
       window.setTimeout(() => {
         setCopiedMessageKey((current) => (current === messageKey ? null : current));
@@ -905,6 +923,34 @@ function App() {
     } catch {
       setErrorMessage("Could not copy this message. Please copy it manually.");
     }
+  }
+
+  async function handleShareMessage(content: string) {
+    resetFeedback();
+
+    try {
+      if ("share" in navigator && typeof navigator.share === "function") {
+        await navigator.share({
+          text: content,
+        });
+        setStatusMessage("Share sheet opened.");
+        return;
+      }
+
+      await navigator.clipboard.writeText(content);
+      setStatusMessage("Copied for sharing.");
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
+      setErrorMessage("Could not share this message.");
+    }
+  }
+
+  function handleMoreMessageAction() {
+    resetFeedback();
+    setStatusMessage("More message actions will be added in a later milestone.");
   }
 
   function handleChatInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -1106,7 +1152,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.4</p>
+              <p className="eyebrow">Akon AI - v0.4.6</p>
               <h1>Your intelligent companion for thought, work, learning, and life.</h1>
               <p className="hero-copy">
                 Akon helps you think clearly, write better, learn faster, plan next
@@ -1198,7 +1244,7 @@ function App() {
   }
 
   return (
-    <main className="product-shell">
+    <main className={shellClassName}>
       <aside className="app-sidebar">
         <div className="sidebar-top">
           <div className="brand-lockup">
@@ -1216,14 +1262,14 @@ function App() {
 
         <section className="sidebar-section">
           <div className="sidebar-section-header">
-            <span>Recent chats</span>
+            <span>History</span>
             {isWorkspaceLoading && <small>Syncing...</small>}
           </div>
 
           <input
             className="sidebar-search-input"
             value={conversationSearch}
-            placeholder="Search chats..."
+            placeholder="Search conversations..."
             onChange={(event) => setConversationSearch(event.target.value)}
           />
 
@@ -1232,8 +1278,8 @@ function App() {
               <div className="sidebar-empty-card">
                 <p>
                   {conversationSearch.trim()
-                    ? "No chats match your search."
-                    : "No chats yet."}
+                    ? "No conversations match your search."
+                    : "No conversations yet."}
                 </p>
               </div>
             ) : (
@@ -1292,10 +1338,18 @@ function App() {
                       }
                       onClick={() => void handleConversationClick(conversation.id)}
                     >
-                      <strong>{conversation.title || "Untitled conversation"}</strong>
-                      <span>
-                        {conversation.safety_level || "Normal"} -{" "}
-                        {formatConversationDate(conversation.created_at)}
+                      <span className="history-title-line">
+                        <span className="history-dot" />
+                        <strong className="history-title">
+                          {conversation.title || "Untitled conversation"}
+                        </strong>
+                      </span>
+
+                      <span className="history-meta">
+                        <span className="history-pill">
+                          {conversation.safety_level || "Normal"}
+                        </span>
+                        <span>{formatConversationDate(conversation.created_at)}</span>
                       </span>
                     </button>
 
@@ -1304,17 +1358,21 @@ function App() {
                         className="conversation-action-button"
                         disabled={Boolean(conversationActionId)}
                         type="button"
+                        aria-label="Rename conversation"
+                        title="Rename"
                         onClick={() => handleBeginRenameConversation(conversation)}
                       >
-                        Rename
+                        ✎
                       </button>
                       <button
                         className="conversation-action-button danger"
                         disabled={Boolean(conversationActionId)}
                         type="button"
+                        aria-label="Delete conversation"
+                        title="Delete"
                         onClick={() => void handleDeleteConversation(conversation)}
                       >
-                        {isActing ? "Deleting..." : "Delete"}
+                        {isActing ? "…" : "×"}
                       </button>
                     </div>
                   </div>
@@ -1347,6 +1405,32 @@ function App() {
           </div>
 
           <div className="topbar-actions">
+            <div className="panel-toggle-row">
+              <button
+                className={
+                  isHistoryPanelOpen
+                    ? "panel-toggle-button active"
+                    : "panel-toggle-button"
+                }
+                type="button"
+                onClick={() => setIsHistoryPanelOpen((current) => !current)}
+              >
+                History
+              </button>
+
+              <button
+                className={
+                  isContextPanelOpen
+                    ? "panel-toggle-button active"
+                    : "panel-toggle-button"
+                }
+                type="button"
+                onClick={() => setIsContextPanelOpen((current) => !current)}
+              >
+                Memory
+              </button>
+            </div>
+
             <div className="workspace-metrics" aria-label="Workspace metrics">
               <span>{conversations.length} chats</span>
               <span>{activeMemoryCount} memories</span>
@@ -1368,7 +1452,7 @@ function App() {
               type="button"
               onClick={() => void handleRetryLastUserMessage()}
             >
-              Retry last
+              ↻
             </button>
           </div>
         </header>
@@ -1445,34 +1529,60 @@ function App() {
 
                         <div className="message-actions">
                           <button
-                            className="message-action-button"
+                            className="message-action-button icon-only-action"
                             type="button"
+                            aria-label="Copy message"
+                            title="Copy"
                             onClick={() => void handleCopyMessage(messageKey, message.content)}
                           >
-                            {copiedMessageKey === messageKey ? "Copied" : "Copy"}
+                            {copiedMessageKey === messageKey ? "✓" : "⧉"}
+                          </button>
+
+                          <button
+                            className="message-action-button icon-only-action"
+                            type="button"
+                            aria-label="Share message"
+                            title="Share"
+                            onClick={() => void handleShareMessage(message.content)}
+                          >
+                            ↗
                           </button>
 
                           {canUseAssistantActions && (
                             <>
                               <button
-                                className="message-action-button"
+                                className="message-action-button icon-only-action"
                                 disabled={isChatLoading}
                                 type="button"
+                                aria-label="Regenerate response"
+                                title="Regenerate"
                                 onClick={() => void handleRegenerateAssistantMessage(message)}
                               >
-                                Regenerate
+                                ↻
                               </button>
 
                               <button
-                                className="message-action-button"
+                                className="message-action-button icon-only-action"
                                 disabled={isChatLoading}
                                 type="button"
+                                aria-label="Continue response"
+                                title="Continue"
                                 onClick={() => void handleContinueResponse()}
                               >
-                                Continue
+                                ↪
                               </button>
                             </>
                           )}
+
+                          <button
+                            className="message-action-button icon-only-action"
+                            type="button"
+                            aria-label="More actions"
+                            title="More"
+                            onClick={handleMoreMessageAction}
+                          >
+                            ⋯
+                          </button>
                         </div>
                       </div>
 
@@ -1505,7 +1615,6 @@ function App() {
 
                       {canGiveFeedback && (
                         <div className="message-quality">
-                          <span>Was this useful?</span>
                           <div className="quality-actions">
                             <button
                               className={
@@ -1515,11 +1624,13 @@ function App() {
                               }
                               disabled={feedbackActionMessageId !== null}
                               type="button"
+                              aria-label="Helpful"
+                              title="Helpful"
                               onClick={() =>
                                 void handleSubmitFeedback(message.id as string, "helpful")
                               }
                             >
-                              Helpful
+                              👍
                             </button>
 
                             <button
@@ -1530,11 +1641,13 @@ function App() {
                               }
                               disabled={feedbackActionMessageId !== null}
                               type="button"
+                              aria-label="Not helpful"
+                              title="Not helpful"
                               onClick={() =>
                                 handleBeginNotHelpfulFeedback(message.id as string)
                               }
                             >
-                              Not helpful
+                              👎
                             </button>
                           </div>
 
@@ -1567,7 +1680,7 @@ function App() {
                                   disabled={feedbackActionMessageId !== null}
                                   type="submit"
                                 >
-                                  Send feedback
+                                  Send
                                 </button>
                                 <button
                                   className="ghost-button"

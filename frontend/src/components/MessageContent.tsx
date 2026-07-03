@@ -184,11 +184,13 @@ function MessageContent({ content }: MessageContentProps) {
               <span>
                 {block.language || "Code"}
                 <button
-                  className="message-action-button"
+                  className="message-action-button icon-only-action"
                   type="button"
+                  aria-label="Copy code"
+                  title="Copy code"
                   onClick={() => void handleCopyCode(index, code)}
                 >
-                  {copiedCodeIndex === index ? "Copied" : "Copy code"}
+                  {copiedCodeIndex === index ? "✓" : "⧉"}
                 </button>
               </span>
               <pre>
