@@ -7,8 +7,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
+from app.api.routes import health
 from app.api.routes.audit import router as audit_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.chat import router as chat_router
@@ -16,7 +18,7 @@ from app.api.routes.memory import router as memory_router
 from app.core.config import settings
 
 
-API_VERSION = "0.3.4"
+API_VERSION = settings.api_version
 
 
 @asynccontextmanager
@@ -24,27 +26,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
 
+docs_url = None if settings.is_production and not settings.expose_docs else "/docs"
+redoc_url = None if settings.is_production and not settings.expose_docs else "/redoc"
+openapi_url = None if settings.is_production and not settings.expose_docs else "/openapi.json"
+
 app = FastAPI(
     title="Akon API",
-    description="Supportive-core backend for Akon AI companion.",
+    description="Production-ready backend foundation for Akon AI companion.",
     version=API_VERSION,
     lifespan=lifespan,
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
 )
-
-allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=settings.cors_allowed_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+if settings.is_production:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.trusted_hosts_list,
+    )
 
 
 @app.middleware("http")
@@ -57,6 +65,30 @@ async def request_id_middleware(
 
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+
+    return response
+
+
+@app.middleware("http")
+async def security_headers_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    response = await call_next(request)
+
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=()",
+    )
+
+    if settings.is_production:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
 
     return response
 
@@ -137,29 +169,7 @@ app.include_router(memory_router, prefix="/memory", tags=["memory"])
 app.include_router(audit_router, prefix="/audit", tags=["audit"])
 
 
-@app.get("/")
-def root() -> dict[str, str]:
-    return {
-        "service": "akon-api",
-        "name": settings.app_name,
-        "version": API_VERSION,
-        "environment": settings.app_env,
-        "status": "ok",
-    }
-
-
-@app.get("/health")
-def health_check() -> dict[str, str]:
-    return {
-        "status": "ok",
-        "service": "akon-api",
-    }
-
-
-@app.get("/version")
-def version() -> dict[str, str]:
-    return {
-        "service": "akon-api",
-        "version": API_VERSION,
-        "environment": settings.app_env,
-    }
+app.get("/")(health.root)
+app.get("/health")(health.health_check)
+app.get("/version")(health.version)
+app.get("/readiness")(health.readiness)

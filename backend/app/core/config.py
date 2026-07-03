@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 AppEnvironment = Literal["development", "test", "production"]
-AIProvider = Literal["mock", "openai"]
+AIProvider = Literal["mock", "openai", "gemini"]
 
 
 DEFAULT_DEV_SECRET = "change-this-dev-secret-before-production"
@@ -15,6 +15,7 @@ DEFAULT_DEV_SECRET = "change-this-dev-secret-before-production"
 class Settings(BaseSettings):
     app_name: str = "Akon"
     app_env: AppEnvironment = "development"
+    api_version: str = "0.5.0"
 
     secret_key: str = DEFAULT_DEV_SECRET
     jwt_algorithm: str = "HS256"
@@ -32,9 +33,20 @@ class Settings(BaseSettings):
     openai_max_output_tokens: int = 900
 
     gemini_api_key: str | None = None
-    gemini_model: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_max_output_tokens: int = 1200
 
     database_url: str = "sqlite:///./akon.db"
+
+    public_frontend_url: str | None = None
+    cors_allowed_origins: str = (
+        "http://localhost:3000,"
+        "http://127.0.0.1:3000,"
+        "http://localhost:5173,"
+        "http://127.0.0.1:5173"
+    )
+    trusted_hosts: str = "localhost,127.0.0.1,testserver"
+    expose_docs: bool = True
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -42,6 +54,31 @@ class Settings(BaseSettings):
         extra="ignore",
         case_sensitive=False,
     )
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
+
+    @property
+    def cors_allowed_origins_list(self) -> list[str]:
+        origins = [
+            origin.strip()
+            for origin in self.cors_allowed_origins.split(",")
+            if origin.strip()
+        ]
+
+        if self.public_frontend_url:
+            origins.append(self.public_frontend_url.strip().rstrip("/"))
+
+        return sorted(set(origins))
+
+    @property
+    def trusted_hosts_list(self) -> list[str]:
+        return [
+            host.strip()
+            for host in self.trusted_hosts.split(",")
+            if host.strip()
+        ]
 
     @field_validator("app_env", mode="before")
     @classmethod
@@ -60,10 +97,20 @@ class Settings(BaseSettings):
     def normalize_default_ai_provider(cls, value: str) -> str:
         normalized = str(value).lower().strip()
 
-        if normalized not in {"mock", "openai"}:
+        if normalized not in {"mock", "openai", "gemini"}:
             raise ValueError(
-                "DEFAULT_AI_PROVIDER must be one of: mock, openai."
+                "DEFAULT_AI_PROVIDER must be one of: mock, openai, gemini."
             )
+
+        return normalized
+
+    @field_validator("api_version", mode="before")
+    @classmethod
+    def normalize_api_version(cls, value: str) -> str:
+        normalized = str(value).strip()
+
+        if not normalized:
+            raise ValueError("API_VERSION cannot be empty.")
 
         return normalized
 
@@ -77,9 +124,28 @@ class Settings(BaseSettings):
 
         return normalized
 
+    @field_validator("gemini_model", mode="before")
+    @classmethod
+    def normalize_gemini_model(cls, value: str) -> str:
+        normalized = str(value).strip()
+
+        if not normalized:
+            raise ValueError("GEMINI_MODEL cannot be empty.")
+
+        return normalized
+
     @field_validator("openai_api_key", mode="before")
     @classmethod
     def normalize_openai_api_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        normalized = str(value).strip()
+        return normalized or None
+
+    @field_validator("gemini_api_key", mode="before")
+    @classmethod
+    def normalize_gemini_api_key(cls, value: str | None) -> str | None:
         if value is None:
             return None
 
@@ -93,6 +159,35 @@ class Settings(BaseSettings):
 
         if not normalized:
             raise ValueError("DATABASE_URL cannot be empty.")
+
+        return normalized
+
+    @field_validator("public_frontend_url", mode="before")
+    @classmethod
+    def normalize_public_frontend_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        normalized = str(value).strip().rstrip("/")
+        return normalized or None
+
+    @field_validator("cors_allowed_origins", mode="before")
+    @classmethod
+    def normalize_cors_allowed_origins(cls, value: str) -> str:
+        normalized = str(value).strip()
+
+        if not normalized:
+            raise ValueError("CORS_ALLOWED_ORIGINS cannot be empty.")
+
+        return normalized
+
+    @field_validator("trusted_hosts", mode="before")
+    @classmethod
+    def normalize_trusted_hosts(cls, value: str) -> str:
+        normalized = str(value).strip()
+
+        if not normalized:
+            raise ValueError("TRUSTED_HOSTS cannot be empty.")
 
         return normalized
 
@@ -113,9 +208,17 @@ class Settings(BaseSettings):
         if self.openai_max_output_tokens <= 0:
             raise ValueError("OPENAI_MAX_OUTPUT_TOKENS must be greater than 0.")
 
+        if self.gemini_max_output_tokens <= 0:
+            raise ValueError("GEMINI_MAX_OUTPUT_TOKENS must be greater than 0.")
+
         if self.default_ai_provider == "openai" and not self.openai_api_key:
             raise ValueError(
                 "OPENAI_API_KEY is required when DEFAULT_AI_PROVIDER=openai."
+            )
+
+        if self.default_ai_provider == "gemini" and not self.gemini_api_key:
+            raise ValueError(
+                "GEMINI_API_KEY is required when DEFAULT_AI_PROVIDER=gemini."
             )
 
         if self.app_env == "production":
@@ -127,6 +230,16 @@ class Settings(BaseSettings):
             if self.default_ai_provider == "mock":
                 raise ValueError(
                     "DEFAULT_AI_PROVIDER=mock is not allowed in production."
+                )
+
+            if "*" in self.cors_allowed_origins_list:
+                raise ValueError(
+                    "Wildcard CORS origins are not allowed in production."
+                )
+
+            if not self.public_frontend_url:
+                raise ValueError(
+                    "PUBLIC_FRONTEND_URL is required in production."
                 )
 
         return self
