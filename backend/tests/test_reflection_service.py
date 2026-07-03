@@ -55,7 +55,7 @@ def test_build_reflection_falls_back_to_neutral() -> None:
 
     assert reflection.conversation_id == "conversation-2"
     assert reflection.dominant_emotion == "neutral"
-    assert reflection.title == "A conversation worth noticing"
+    assert reflection.title == "A planning thread"
     assert reflection.message_count == 2
 
 

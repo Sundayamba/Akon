@@ -52,10 +52,101 @@ EMOTION_REFLECTIONS: dict[str, dict[str, str]] = {
         "next_step": "Notice what is helping you feel steady, then keep one part of that with you today.",
     },
     "neutral": {
-        "title": "A conversation worth noticing",
-        "summary": "This conversation seems to be about sorting things out one piece at a time.",
-        "next_step": "Choose the one part of this conversation that feels most useful to continue from.",
+        "title": "A conversation worth continuing",
+        "summary": "This conversation is mainly about sorting out a topic, task, or idea.",
+        "next_step": "Continue from the most useful point in the conversation.",
     },
+}
+
+
+TASK_REFLECTIONS: dict[str, dict[str, str]] = {
+    "technical": {
+        "title": "A technical troubleshooting thread",
+        "summary": "This conversation is mainly about diagnosing, fixing, or improving a technical issue.",
+        "next_step": "Continue from the last command, error, file, or test result so the next step stays grounded.",
+    },
+    "learning": {
+        "title": "A learning thread",
+        "summary": "This conversation is mainly about understanding a topic step by step.",
+        "next_step": "Continue with the next concept, example, or practice checkpoint.",
+    },
+    "writing": {
+        "title": "A writing thread",
+        "summary": "This conversation is mainly about creating or improving wording.",
+        "next_step": "Continue by refining tone, clarity, audience, or final formatting.",
+    },
+    "planning": {
+        "title": "A planning thread",
+        "summary": "This conversation is mainly about turning an idea or goal into practical steps.",
+        "next_step": "Continue with priorities, constraints, timeline, and the next action.",
+    },
+    "decision": {
+        "title": "A decision thread",
+        "summary": "This conversation is mainly about comparing options and choosing a direction.",
+        "next_step": "Continue by clarifying tradeoffs, risks, and the strongest recommendation.",
+    },
+    "general": {
+        "title": "A conversation worth continuing",
+        "summary": "This conversation is mainly about sorting out a topic, task, or idea.",
+        "next_step": "Continue from the point that feels most useful now.",
+    },
+}
+
+
+TECHNICAL_SIGNALS = {
+    "code",
+    "error",
+    "traceback",
+    "python",
+    "react",
+    "typescript",
+    "fastapi",
+    "api",
+    "backend",
+    "frontend",
+    "pytest",
+    "build",
+    "git",
+}
+
+LEARNING_SIGNALS = {
+    "explain",
+    "teach",
+    "learn",
+    "study",
+    "what is",
+    "how does",
+    "cybersecurity",
+    "networking",
+}
+
+WRITING_SIGNALS = {
+    "write",
+    "rewrite",
+    "draft",
+    "message",
+    "email",
+    "announcement",
+    "caption",
+    "speech",
+}
+
+PLANNING_SIGNALS = {
+    "plan",
+    "roadmap",
+    "schedule",
+    "steps",
+    "strategy",
+    "next step",
+}
+
+DECISION_SIGNALS = {
+    "should i",
+    "which one",
+    "choose",
+    "decide",
+    "worth it",
+    "pros and cons",
 }
 
 
@@ -65,6 +156,17 @@ def _normalize_emotion(emotion: str | None) -> str:
 
     normalized = emotion.strip().lower()
     return normalized if normalized in EMOTION_REFLECTIONS else "neutral"
+
+
+def _normalize_text(text: str | None) -> str:
+    if not text:
+        return ""
+
+    return " ".join(text.lower().split())
+
+
+def _contains_any(text: str, signals: set[str]) -> bool:
+    return any(signal in text for signal in signals)
 
 
 def _dominant_emotion(messages: list[MessageForReflection]) -> str:
@@ -84,16 +186,42 @@ def _user_message_count(messages: list[MessageForReflection]) -> int:
     return sum(1 for message in messages if message.get("role") == "user")
 
 
+def _conversation_task_theme(messages: list[MessageForReflection]) -> str:
+    user_text = " ".join(
+        _normalize_text(message.get("content"))
+        for message in messages
+        if message.get("role") == "user"
+    )
+
+    if _contains_any(user_text, TECHNICAL_SIGNALS):
+        return "technical"
+
+    if _contains_any(user_text, WRITING_SIGNALS):
+        return "writing"
+
+    if _contains_any(user_text, LEARNING_SIGNALS):
+        return "learning"
+
+    if _contains_any(user_text, PLANNING_SIGNALS):
+        return "planning"
+
+    if _contains_any(user_text, DECISION_SIGNALS):
+        return "decision"
+
+    return "general"
+
+
 def build_conversation_reflection(
     *,
     conversation_id: str,
     messages: list[MessageForReflection],
 ):
     """
-    Build a warm, non-clinical reflection summary for a conversation.
+    Build a non-clinical reflection summary for a conversation.
 
-    This does not diagnose the user. It only summarizes the visible conversation
-    pattern in supportive language.
+    Emotional reflections are used only when the dominant emotion is meaningful.
+    Neutral conversations are summarized by task theme instead of being forced into
+    emotional language.
     """
     from app.schemas.chat import ConversationReflectionResponse
 
@@ -101,9 +229,14 @@ def build_conversation_reflection(
         raise ValueError("Cannot reflect on an empty conversation.")
 
     dominant_emotion = _dominant_emotion(messages)
-    reflection = EMOTION_REFLECTIONS[dominant_emotion]
     user_count = _user_message_count(messages)
     message_count = len(messages)
+
+    if dominant_emotion != "neutral":
+        reflection = EMOTION_REFLECTIONS[dominant_emotion]
+    else:
+        task_theme = _conversation_task_theme(messages)
+        reflection = TASK_REFLECTIONS[task_theme]
 
     summary = reflection["summary"]
 

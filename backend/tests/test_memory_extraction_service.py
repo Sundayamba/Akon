@@ -74,6 +74,20 @@ def test_extracts_emotional_baseline_candidate() -> None:
     assert candidates[0]["memory_type"] == "emotional_baseline"
 
 
+def test_extracts_learning_goal_candidate() -> None:
+    candidates = extract_memory_candidates(
+        message="I want to learn cybersecurity properly this year.",
+        safety_result={
+            "level": "S0",
+            "reason": "No immediate safety concern detected.",
+            "detected_emotion": None,
+        },
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0]["memory_type"] == "goal"
+
+
 def test_sensitive_candidate_requires_high_sensitivity() -> None:
     candidates = extract_memory_candidates(
         message="I prefer that you remember my medication situation carefully.",
@@ -90,9 +104,37 @@ def test_sensitive_candidate_requires_high_sensitivity() -> None:
     assert candidates[0]["consent_required"] is True
 
 
+def test_explicit_remember_request_creates_candidate() -> None:
+    candidates = extract_memory_candidates(
+        message="Remember that I prefer short and direct answers.",
+        safety_result={
+            "level": "S0",
+            "reason": "No immediate safety concern detected.",
+            "detected_emotion": None,
+        },
+    )
+
+    assert len(candidates) == 1
+    assert candidates[0]["memory_type"] == "preference"
+    assert candidates[0]["confidence"] == "high"
+
+
 def test_no_candidate_for_normal_message() -> None:
     candidates = extract_memory_candidates(
         message="Hello Akon, how are you today?",
+        safety_result={
+            "level": "S0",
+            "reason": "No immediate safety concern detected.",
+            "detected_emotion": None,
+        },
+    )
+
+    assert candidates == []
+
+
+def test_no_candidate_for_one_off_learning_request() -> None:
+    candidates = extract_memory_candidates(
+        message="Can you teach me networking basics step by step?",
         safety_result={
             "level": "S0",
             "reason": "No immediate safety concern detected.",

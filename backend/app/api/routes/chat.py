@@ -43,14 +43,169 @@ GROUNDING_EMOTIONS = {
     "lonely",
 }
 
+TITLE_STOPWORDS = {
+    "please",
+    "help",
+    "me",
+    "with",
+    "about",
+    "the",
+    "and",
+    "for",
+    "that",
+    "this",
+    "into",
+    "from",
+    "your",
+    "akon",
+}
 
-def _create_conversation_title(message: str) -> str:
-    cleaned = " ".join(message.strip().split())
 
-    if len(cleaned) <= 60:
+def _normalize_text(value: str) -> str:
+    return " ".join(value.strip().split())
+
+
+def _clip_text(value: str, limit: int = 380) -> str:
+    cleaned = _normalize_text(value)
+
+    if len(cleaned) <= limit:
         return cleaned
 
-    return f"{cleaned[:57]}..."
+    return f"{cleaned[: limit - 3]}..."
+
+
+def _contains_any(text: str, signals: set[str]) -> bool:
+    normalized = text.lower()
+    return any(signal in normalized for signal in signals)
+
+
+def _create_conversation_title(message: str) -> str:
+    cleaned = _normalize_text(message)
+    normalized = cleaned.lower()
+
+    if not cleaned:
+        return "New conversation"
+
+    if normalized in {
+        "hi",
+        "hello",
+        "hey",
+        "good morning",
+        "goo morning",
+        "good afternoon",
+        "good evening",
+        "how are you",
+        "how are you doing",
+    }:
+        return "Casual check-in"
+
+    if _contains_any(
+        normalized,
+        {
+            "traceback",
+            "error",
+            "bug",
+            "pytest",
+            "build",
+            "runtimeerror",
+            "module not found",
+        },
+    ):
+        return "Technical troubleshooting"
+
+    if _contains_any(
+        normalized,
+        {
+            "cybersecurity",
+            "networking",
+            "linux",
+            "windows server",
+            "active directory",
+            "soc analyst",
+        },
+    ):
+        return "Cybersecurity learning"
+
+    if _contains_any(
+        normalized,
+        {
+            "professional announcement",
+            "write an announcement",
+            "write a professional announcement",
+        },
+    ):
+        return "Professional announcement"
+
+    if _contains_any(
+        normalized,
+        {
+            "write",
+            "rewrite",
+            "draft",
+            "compose",
+            "message to",
+            "email",
+        },
+    ):
+        return "Writing draft"
+
+    if _contains_any(
+        normalized,
+        {
+            "roadmap",
+            "plan",
+            "strategy",
+            "next step",
+            "steps",
+        },
+    ):
+        return "Planning next steps"
+
+    if _contains_any(
+        normalized,
+        {
+            "should i",
+            "which one",
+            "choose",
+            "decide",
+            "worth it",
+        },
+    ):
+        return "Decision support"
+
+    if _contains_any(
+        normalized,
+        {
+            "i feel overwhelmed",
+            "i feel lost",
+            "i feel betrayed",
+            "i feel sad",
+            "i am stressed",
+            "i'm stressed",
+        },
+    ):
+        return "Support conversation"
+
+    words = [
+        word.strip(".,!?;:()[]{}\"'").lower()
+        for word in cleaned.split()
+    ]
+
+    meaningful_words = [
+        word
+        for word in words
+        if len(word) >= 3 and word not in TITLE_STOPWORDS
+    ]
+
+    if meaningful_words:
+        title = " ".join(meaningful_words[:7]).capitalize()
+    else:
+        title = cleaned
+
+    if len(title) <= 60:
+        return title
+
+    return f"{title[:57]}..."
 
 
 def _audit_risk_from_safety_level(safety_level: str | None) -> str:
@@ -175,6 +330,78 @@ def _find_previous_user_message(
     return None
 
 
+def _messages_before_message(
+    messages: list[Message],
+    message_id: str,
+) -> list[Message]:
+    message_index = next(
+        (
+            index
+            for index, message in enumerate(messages)
+            if message.id == message_id
+        ),
+        None,
+    )
+
+    if message_index is None:
+        return []
+
+    return messages[:message_index]
+
+
+def _build_recent_conversation_context(
+    messages: list[Message],
+    limit: int = 8,
+) -> str | None:
+    if not messages:
+        return None
+
+    recent_messages = messages[-limit:]
+
+    context_lines = []
+
+    for message in recent_messages:
+        role = "User" if message.role == "user" else "Akon"
+        context_lines.append(f"- {role}: {_clip_text(message.content)}")
+
+    return "\n".join(context_lines)
+
+
+def _build_ai_context(
+    db: Session,
+    *,
+    user_id: str,
+    message: str,
+    existing_messages: list[Message] | None = None,
+) -> str | None:
+    context_blocks = []
+
+    memory_context = retrieve_memory_context(
+        db=db,
+        user_id=user_id,
+        message=message,
+    )
+
+    if memory_context:
+        context_blocks.append(
+            "Relevant saved memory. Use only if directly helpful:\n"
+            f"{memory_context}"
+        )
+
+    recent_context = _build_recent_conversation_context(existing_messages or [])
+
+    if recent_context:
+        context_blocks.append(
+            "Recent conversation context. Use this to maintain continuity without repeating it:\n"
+            f"{recent_context}"
+        )
+
+    if not context_blocks:
+        return None
+
+    return "\n\n".join(context_blocks)
+
+
 def _raise_ai_unavailable_error() -> None:
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -224,6 +451,8 @@ def send_chat_message(
             detail="Conversation not found.",
         )
 
+    existing_messages: list[Message] = []
+
     if conversation is None:
         conversation = Conversation(
             id=conversation_id,
@@ -233,22 +462,29 @@ def send_chat_message(
         )
         db.add(conversation)
         db.flush()
+    else:
+        existing_messages = _get_owned_conversation_messages(
+            db=db,
+            conversation_id=conversation.id,
+            user_id=current_user.id,
+        )
 
     safety_result = classify_safety(payload.message)
     safety_level = safety_result["level"]
     detected_emotion = safety_result.get("detected_emotion")
 
-    memory_context = retrieve_memory_context(
+    ai_context = _build_ai_context(
         db=db,
         user_id=current_user.id,
         message=payload.message,
+        existing_messages=existing_messages,
     )
 
     try:
         reply = generate_akon_reply(
             message=payload.message,
             safety_result=safety_result,
-            memory_context=memory_context,
+            memory_context=ai_context,
         )
     except LLMProviderError:
         db.rollback()
@@ -301,6 +537,8 @@ def send_chat_message(
             "detected_emotion": detected_emotion,
             "grounding_tool": grounding_tool.name if grounding_tool else None,
             "memory_candidate_count": len(memory_candidates),
+            "used_ai_context": bool(ai_context),
+            "recent_context_message_count": len(existing_messages[-8:]),
             "user_message_id": user_message.id,
             "assistant_message_id": assistant_message.id,
             "message_length": len(payload.message),
@@ -368,21 +606,27 @@ def regenerate_assistant_message(
             detail="Could not find the user message that produced this reply.",
         )
 
+    prior_messages = _messages_before_message(
+        messages=messages,
+        message_id=previous_user_message.id,
+    )
+
     safety_result = classify_safety(previous_user_message.content)
     safety_level = safety_result["level"]
     detected_emotion = safety_result.get("detected_emotion")
 
-    memory_context = retrieve_memory_context(
+    ai_context = _build_ai_context(
         db=db,
         user_id=current_user.id,
         message=previous_user_message.content,
+        existing_messages=prior_messages,
     )
 
     try:
         reply = generate_akon_reply(
             message=previous_user_message.content,
             safety_result=safety_result,
-            memory_context=memory_context,
+            memory_context=ai_context,
         )
     except LLMProviderError:
         db.rollback()
@@ -419,6 +663,7 @@ def regenerate_assistant_message(
             "source_message_id": source_message.id,
             "previous_user_message_id": previous_user_message.id,
             "new_assistant_message_id": assistant_message.id,
+            "used_ai_context": bool(ai_context),
             "safety_level": safety_level,
             "detected_emotion": detected_emotion,
         },
@@ -659,7 +904,7 @@ def update_conversation(
         user_id=current_user.id,
     )
 
-    cleaned_title = " ".join(payload.title.strip().split())
+    cleaned_title = _normalize_text(payload.title)
 
     if not cleaned_title:
         raise HTTPException(

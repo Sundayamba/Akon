@@ -69,6 +69,23 @@ def test_chat_message_returns_memory_candidate() -> None:
     assert data["memory_candidates"][0]["consent_required"] is True
 
 
+def test_chat_message_avoids_noisy_memory_candidate_for_one_off_task() -> None:
+    headers = auth_headers(client)
+
+    response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={"message": "Can you teach me networking basics step by step?"},
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["safety_level"] == "S0"
+    assert data["memory_candidates"] == []
+
+
 def test_crisis_message_does_not_return_memory_candidate() -> None:
     headers = auth_headers(client)
 
@@ -96,6 +113,31 @@ def test_chat_message_rejects_empty_message() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_conversation_title_is_professional_for_writing_request() -> None:
+    headers = auth_headers(client)
+
+    create_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={
+            "message": "Write a professional announcement to my team about workplace discipline.",
+        },
+    )
+
+    assert create_response.status_code == 200
+
+    conversation_id = create_response.json()["conversation_id"]
+
+    detail_response = client.get(
+        f"/chat/conversations/{conversation_id}",
+        headers=headers,
+    )
+
+    assert detail_response.status_code == 200
+
+    assert detail_response.json()["title"] == "Professional announcement"
 
 
 def test_list_conversations_returns_list() -> None:
