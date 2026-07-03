@@ -50,6 +50,7 @@ HIGH_DISTRESS_KEYWORDS = [
     "i'm losing control",
 ]
 
+
 def _contains_any(message: str, keywords: list[str]) -> bool:
     normalized = message.lower()
     return any(keyword in normalized for keyword in keywords)

@@ -38,6 +38,14 @@ LEARNING_SIGNALS = {
     "step by step",
     "example",
     "practice",
+    "cybersecurity",
+    "networking",
+    "linux",
+    "windows server",
+    "active directory",
+    "cloud security",
+    "python for cybersecurity",
+    "soc analyst",
 }
 
 RESEARCH_SIGNALS = {
@@ -45,6 +53,7 @@ RESEARCH_SIGNALS = {
     "find out",
     "look into",
     "analyze",
+    "analyse",
     "compare",
     "latest",
     "trend",
@@ -67,6 +76,8 @@ PLANNING_SIGNALS = {
     "strategy",
     "next step",
     "steps",
+    "milestone",
+    "workflow",
 }
 
 WRITING_SIGNALS = {
@@ -75,7 +86,6 @@ WRITING_SIGNALS = {
     "draft",
     "polish",
     "compose",
-    "message",
     "email",
     "letter",
     "caption",
@@ -89,6 +99,7 @@ WRITING_SIGNALS = {
     "give me an email",
     "give me a caption",
     "give me a speech",
+    "send to",
 }
 
 TECHNICAL_SIGNALS = {
@@ -115,6 +126,12 @@ TECHNICAL_SIGNALS = {
     "deploy",
     "git",
     "github",
+    "uvicorn",
+    "npm",
+    "vite",
+    ".env",
+    "module not found",
+    "runtimeerror",
 }
 
 DECISION_SIGNALS = {
@@ -127,6 +144,8 @@ DECISION_SIGNALS = {
     "worth it",
     "pros and cons",
     "what do you think",
+    "is it advisable",
+    "recommend",
 }
 
 CASUAL_EXACT_SIGNALS = {
@@ -190,6 +209,7 @@ EMOTIONAL_SUPPORT_SIGNALS = {
     "i don't know what to do",
     "i need advice",
     "i need someone to talk to",
+    "i feel like giving up",
 }
 
 
@@ -323,18 +343,18 @@ def _casual_fallback_reply(message: str) -> str:
     normalized = _normalize_message(message)
 
     if "morning" in normalized:
-        return "Good morning. I’m doing well and ready to help. How is your morning going?"
+        return "Good morning. I'm doing well and ready to help. How is your morning going?"
 
     if "afternoon" in normalized:
-        return "Good afternoon. I’m here and ready whenever you are. How is your day going?"
+        return "Good afternoon. I'm here and ready whenever you are. How is your day going?"
 
     if "evening" in normalized:
-        return "Good evening. I’m doing well and ready to help. How has your day been?"
+        return "Good evening. I'm doing well and ready to help. How has your day been?"
 
     if "how are you" in normalized or "how you doing" in normalized:
-        return "I’m doing well and ready to help. What are you working on today?"
+        return "I'm doing well and ready to help. What are you working on today?"
 
-    return "Hey, I’m here. What would you like us to talk about today?"
+    return "Hey, I'm here. What would you like us to talk about today?"
 
 
 def _writing_fallback_reply(message: str) -> str:
@@ -347,21 +367,19 @@ def _writing_fallback_reply(message: str) -> str:
         or "message" in normalized
     ):
         return (
-            "Here’s a message you can send:\n\n"
             "Good morning team,\n\n"
             "I want to encourage everyone to stay focused, disciplined, and committed. "
             "Every effort we put in matters, every customer we serve matters, and every "
             "sale brings us closer to our goal.\n\n"
-            "Let’s keep pushing with positive energy, teamwork, and consistency. I believe "
+            "Let's keep pushing with positive energy, teamwork, and consistency. I believe "
             "in this team, and I know we can achieve stronger results when we all give our best.\n\n"
-            "Let’s make this period productive and successful for all of us."
+            "Let's make this period productive and successful for all of us."
         )
 
     return (
-        "Here’s a clean draft you can use:\n\n"
         "Hello,\n\n"
         "I hope you are doing well. I wanted to share this message clearly and respectfully. "
-        "Thank you for your effort, attention, and commitment. Let’s keep moving forward "
+        "Thank you for your effort, attention, and commitment. Let's keep moving forward "
         "with focus, discipline, and a positive mindset.\n\n"
         "Best regards."
     )
@@ -369,39 +387,37 @@ def _writing_fallback_reply(message: str) -> str:
 
 def _learning_fallback_reply() -> str:
     return (
-        "I can help you learn it step by step.\n\n"
-        "Start by telling me the exact topic or question, and I’ll explain it clearly with "
+        "Let's learn it step by step.\n\n"
+        "Start by telling me the exact topic or question, and I'll explain it clearly with "
         "simple examples and practice points."
     )
 
 
 def _research_fallback_reply() -> str:
     return (
-        "I can help structure the research clearly.\n\n"
-        "Share the topic, and I’ll break it into the key questions, comparison points, "
+        "Let's structure the research clearly.\n\n"
+        "Share the topic, and I'll break it into the key questions, comparison points, "
         "evidence to look for, and a clean summary structure."
     )
 
 
 def _planning_fallback_reply() -> str:
     return (
-        "I can help turn this into a clear plan.\n\n"
-        "Let’s define the goal, the deadline, the constraints, and the first practical step."
+        "Let's turn this into a clear plan.\n\n"
+        "We need the goal, the deadline, the constraints, and the first practical step."
     )
 
 
 def _technical_fallback_reply() -> str:
     return (
-        "I can help troubleshoot it directly.\n\n"
-        "Send the exact error, file, command output, or code section, and I’ll guide you "
+        "Send the exact error, file, command output, or code section, and I'll guide you "
         "through the fix step by step."
     )
 
 
 def _decision_fallback_reply() -> str:
     return (
-        "I can help you decide.\n\n"
-        "Let’s compare the options by cost, risk, benefit, timing, and what matters most "
+        "Let's compare the options by cost, risk, benefit, timing, and what matters most "
         "to you."
     )
 
@@ -431,10 +447,7 @@ def _adaptive_fallback_reply(
     if response_posture == "decision":
         return _decision_fallback_reply()
 
-    return (
-        "I can help with that. Tell me what you want to do next, and I’ll respond in the "
-        "most useful way for the task."
-    )
+    return "Tell me what you want to do next, and I'll respond in the most useful way for the task."
 
 
 def _fallback_reply(
@@ -492,7 +505,7 @@ def _should_use_local_fallback() -> bool:
     """
     Decide whether provider failures may fall back to Akon's local deterministic reply.
 
-    Development can use fallback for resilience. Production can disable this with:
+    Development can use fallback for resilience. For real AI verification use:
     ALLOW_AI_FALLBACK=false
     """
     return bool(settings.allow_ai_fallback)

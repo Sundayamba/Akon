@@ -45,7 +45,7 @@ def test_chat_message_returns_reply() -> None:
     assert "conversation_id" in data
     assert "memory_candidates" in data
     assert isinstance(data["memory_candidates"], list)
-    assert "Akon senses" in data["reply"]
+    assert "stress or overwhelm" in data["reply"]
     assert "One small step" in data["reply"]
     assert "I am here with you" in data["reply"]
 

@@ -14,7 +14,7 @@ def test_support_strategy_output_shape() -> None:
 
     assert len(parts) == 4
     assert parts[0].startswith("That sounds")
-    assert "Akon senses" in parts[1]
+    assert "stress or overwhelm" in parts[1]
     assert parts[2].startswith("One small step")
     assert parts[3] == "I am here with you as we sort it out."
 

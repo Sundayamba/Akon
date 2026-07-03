@@ -27,42 +27,39 @@ ResponsePosture = Literal[
 
 POSTURE_INSTRUCTIONS: dict[ResponsePosture, str] = {
     "general": (
-        "Answer the user's actual request directly and naturally. Be helpful, clear, "
-        "and practical. Do not assume the user is emotionally distressed."
+        "Answer the user's request directly. Be clear, useful, and practical. "
+        "Do not assume distress. Avoid filler."
     ),
     "learning": (
-        "Act like a clear tutor. Explain step by step, use simple examples, and help "
-        "the user understand the topic. If the user asks for depth, expand. If not, "
-        "keep it focused."
+        "Teach clearly. Start from the user's level, explain the concept, show why it matters, "
+        "break it into steps, and include a small checkpoint when useful."
     ),
     "research": (
-        "Act like a research assistant. Organize the answer clearly, separate facts "
-        "from assumptions, and say when fresh verification is needed."
+        "Act like a research assistant. Organize the answer, separate facts from assumptions, "
+        "and clearly state when current verification is needed."
     ),
     "planning": (
-        "Act like a practical planner. Give realistic priorities, steps, sequencing, "
-        "constraints, and next actions."
+        "Act like a practical planner. Give priorities, realistic sequence, constraints, risks, "
+        "and immediate next actions."
     ),
     "writing": (
-        "Act like a writing assistant. If the user asks for a message, email, caption, "
-        "letter, speech, announcement, or wording, produce a usable draft immediately "
-        "when enough context exists. Do not merely say you can help."
+        "Act like a writing assistant. Produce finished usable wording immediately when enough "
+        "context exists. Match the audience and tone. Do not merely offer to help."
     ),
     "technical": (
-        "Act like a technical assistant. Diagnose clearly, give exact commands, code, "
-        "file-level guidance, or test steps when useful. Avoid unnecessary emotional language."
+        "Act like a senior technical assistant. Diagnose from the supplied context, give exact "
+        "commands, file names, code, validation steps, and concise reasoning."
     ),
     "decision": (
-        "Act like a decision assistant. Compare options, tradeoffs, risks, benefits, "
-        "timing, and give a clear recommendation when enough information exists."
+        "Act like a decision advisor. Compare options by cost, risk, upside, downside, timing, "
+        "and long-term fit. Recommend clearly when enough context exists."
     ),
     "casual": (
-        "Respond naturally and lightly. Treat the message as normal conversation, not "
-        "as emotional support."
+        "Respond naturally and briefly. Treat the message as normal conversation, not emotional support."
     ),
     "emotional_support": (
-        "Respond with warm support. Validate briefly, avoid clinical language, and guide "
-        "toward one clear next step."
+        "Respond warmly and calmly. Validate briefly, avoid clinical language, and guide toward "
+        "one controllable next step."
     ),
 }
 
@@ -97,6 +94,10 @@ def _fallback_posture_from_message(message: str) -> ResponsePosture:
             "api",
             "database",
             "sql",
+            "terminal",
+            "powershell",
+            "build",
+            "deploy",
         }
     ):
         return "technical"
@@ -108,12 +109,12 @@ def _fallback_posture_from_message(message: str) -> ResponsePosture:
             "rewrite",
             "draft",
             "compose",
-            "message",
             "email",
             "letter",
             "caption",
             "speech",
             "announcement",
+            "make it professional",
         }
     ):
         return "writing"
@@ -128,6 +129,9 @@ def _fallback_posture_from_message(message: str) -> ResponsePosture:
             "what is",
             "how does",
             "step by step",
+            "cybersecurity",
+            "networking",
+            "linux",
         }
     ):
         return "learning"
@@ -216,18 +220,18 @@ def _build_casual_mock_reply(message: str) -> str:
     normalized = _normalize_message(message)
 
     if "morning" in normalized:
-        return "Good morning. I’m doing well and ready to help. How is your morning going?"
+        return "Good morning. I'm doing well and ready to help. How is your morning going?"
 
     if "afternoon" in normalized:
-        return "Good afternoon. I’m here and ready when you are. How is your day going?"
+        return "Good afternoon. I'm here and ready when you are. How is your day going?"
 
     if "evening" in normalized:
-        return "Good evening. I’m doing well and ready to help. How has your day been?"
+        return "Good evening. I'm doing well and ready to help. How has your day been?"
 
     if "how are you" in normalized or "how you doing" in normalized:
-        return "I’m doing well and ready to help. What are you working on today?"
+        return "I'm doing well and ready to help. What are you working on today?"
 
-    return "Hey. I’m here and ready. What would you like us to do today?"
+    return "Hey. I'm here and ready. What would you like us to do today?"
 
 
 def _build_writing_mock_reply(message: str) -> str:
@@ -235,19 +239,19 @@ def _build_writing_mock_reply(message: str) -> str:
 
     if "team" in normalized and ("motivat" in normalized or "encourage" in normalized):
         return (
-            "Here’s a message you can send:\n\n"
+            "Here's a message you can send:\n\n"
             "Good morning team,\n\n"
             "I want to encourage everyone to stay focused, disciplined, and committed. "
             "Every effort we put in matters, every customer we serve matters, and every "
             "sale brings us closer to our goal.\n\n"
-            "Let’s keep pushing with positive energy, teamwork, and consistency. I believe "
+            "Let's keep pushing with positive energy, teamwork, and consistency. I believe "
             "in this team, and I know we can achieve stronger results when we all give our best.\n\n"
-            "Let’s make this period productive and successful for all of us."
+            "Let's make this period productive and successful for all of us."
         )
 
     if "manager" in normalized or "boss" in normalized:
         return (
-            "Here’s a professional message you can send:\n\n"
+            "Here's a professional message you can send:\n\n"
             "Good day,\n\n"
             "I hope you are doing well. I would like to respectfully discuss an important "
             "matter with you when you have time. I believe it would be best for us to talk "
@@ -257,7 +261,7 @@ def _build_writing_mock_reply(message: str) -> str:
         )
 
     return (
-        "Here’s a clean draft you can use:\n\n"
+        "Here's a clean draft you can use:\n\n"
         "Hello,\n\n"
         "I hope you are doing well. I wanted to share this message clearly and respectfully. "
         "Thank you for your time, effort, and attention. I believe we can move forward "
@@ -290,41 +294,39 @@ def _build_mock_reply(
 
     if response_posture == "learning":
         return (
-            "I can help you learn this step by step.\n\n"
-            "Send me the exact topic or question, and I’ll explain it clearly with examples "
+            "Let's learn it step by step.\n\n"
+            "Send me the exact topic or question, and I'll explain it clearly with examples "
             "and practice points."
         )
 
     if response_posture == "research":
         return (
-            "I can help you structure the research.\n\n"
-            "Send the topic, and I’ll organize it into key questions, comparison points, "
+            "Let's structure the research clearly.\n\n"
+            "Send the topic, and I'll organize it into key questions, comparison points, "
             "evidence to look for, and a clean summary."
         )
 
     if response_posture == "planning":
         return (
-            "I can help you build a clear plan.\n\n"
-            "Let’s define the goal, deadline, constraints, priorities, and the first practical step."
+            "Let's build a clear plan.\n\n"
+            "We need the goal, deadline, constraints, priorities, and first practical step."
         )
 
     if response_posture == "technical":
         return (
-            "I can help troubleshoot this directly.\n\n"
-            "Send the exact error, file, command output, or code section, and I’ll guide you "
+            "Send the exact error, file, command output, or code section, and I'll guide you "
             "through the fix step by step."
         )
 
     if response_posture == "decision":
         return (
-            "I can help you decide.\n\n"
-            "Let’s compare the options by cost, risk, benefit, timing, and what matters most."
+            "Let's compare the options by cost, risk, benefit, timing, and what matters most."
         )
 
-    return "I can help with that. Tell me what you want to do, and I’ll respond directly."
+    return "Tell me what you want to do, and I'll respond directly."
 
 
-def _build_openai_input(
+def _build_provider_input(
     *,
     message: str,
     safety_level: str,
@@ -336,22 +338,24 @@ def _build_openai_input(
     posture_instruction = POSTURE_INSTRUCTIONS[response_posture]
 
     return (
+        "You are generating the next Akon reply.\n\n"
         f"Safety level: {safety_level}\n"
         f"Detected emotion: {detected_emotion or 'none'}\n"
         f"Internal response posture: {response_posture}\n\n"
         f"Response guidance:\n{posture_instruction}\n\n"
-        "Important behavior rules:\n"
-        "- Answer the user's actual request directly.\n"
-        "- Do not assume emotional distress by default.\n"
-        "- Use emotional-support language only when response posture is emotional_support "
-        "or when safety requires it.\n"
-        "- If the user asks for a message, email, caption, letter, announcement, or speech, "
-        "produce the draft immediately when enough context exists.\n"
-        "- If the user greets you casually, reply naturally like a normal companion.\n"
-        "- If the user asks for learning, research, planning, technical help, or a decision, "
-        "respond in that useful posture.\n"
-        "- Do not mention saved memory, saved context, or old details unless they are directly "
-        "useful for answering the user's current request.\n\n"
+        "Output requirements:\n"
+        "- Answer the user's actual request first.\n"
+        "- Do not start with generic phrases like 'I can help with that' unless it is truly natural.\n"
+        "- Do not assume emotional distress unless the posture or safety context requires it.\n"
+        "- Do not over-apologize.\n"
+        "- If the user asks for writing, produce the finished draft.\n"
+        "- If the user asks for technical help, give exact commands, file names, or code where useful.\n"
+        "- If the user asks for learning, teach clearly and check understanding when appropriate.\n"
+        "- If the user asks for a decision, compare and recommend when possible.\n"
+        "- If current verification is required, say so plainly without pretending to browse.\n"
+        "- Use saved memory only if it directly improves this answer.\n"
+        "- Do not mention saved memory unless it is relevant to the user request.\n"
+        "- Keep the answer concise unless depth is needed.\n\n"
         f"Relevant saved memory:\n{memory_block}\n\n"
         f"User message:\n{message}"
     )
@@ -415,7 +419,7 @@ class OpenAILLMProvider(BaseLLMProvider):
             response = self.client.responses.create(
                 model=self.model,
                 instructions=AKON_SYSTEM_PROMPT,
-                input=_build_openai_input(
+                input=_build_provider_input(
                     message=message,
                     safety_level=safety_level,
                     detected_emotion=detected_emotion,
@@ -436,6 +440,62 @@ class OpenAILLMProvider(BaseLLMProvider):
             raise LLMProviderError(f"OpenAI provider failed: {exc}") from exc
 
 
+class GeminiLLMProvider(BaseLLMProvider):
+    def __init__(self) -> None:
+        if not settings.gemini_api_key:
+            raise LLMProviderError("GEMINI_API_KEY is missing.")
+
+        try:
+            from google import genai
+        except Exception as exc:
+            raise LLMProviderError(
+                "google-genai is not installed. Run: python -m pip install google-genai"
+            ) from exc
+
+        self.client = genai.Client(api_key=settings.gemini_api_key)
+        self.model = settings.gemini_model
+
+    def generate_reply(
+        self,
+        message: str,
+        safety_level: str,
+        detected_emotion: str | None,
+        memory_context: str | None = None,
+        response_posture: ResponsePosture | None = None,
+    ) -> str:
+        posture = response_posture or _fallback_posture_from_message(message)
+
+        try:
+            from google.genai import types
+
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=_build_provider_input(
+                    message=message,
+                    safety_level=safety_level,
+                    detected_emotion=detected_emotion,
+                    memory_context=memory_context,
+                    response_posture=posture,
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=AKON_SYSTEM_PROMPT,
+                    max_output_tokens=settings.gemini_max_output_tokens,
+                    temperature=0.65,
+                    top_p=0.95,
+                ),
+            )
+
+            reply = getattr(response, "text", None)
+
+            if not reply:
+                raise LLMProviderError("Gemini response did not include text.")
+
+            return reply.strip()
+
+        except Exception as exc:
+            raise LLMProviderError(f"Gemini provider failed: {exc}") from exc
+
+
 def get_llm_provider() -> BaseLLMProvider:
     provider = settings.default_ai_provider.lower().strip()
 
@@ -444,5 +504,8 @@ def get_llm_provider() -> BaseLLMProvider:
 
     if provider == "openai":
         return OpenAILLMProvider()
+
+    if provider == "gemini":
+        return GeminiLLMProvider()
 
     raise LLMProviderError(f"Unsupported AI provider: {settings.default_ai_provider}")
