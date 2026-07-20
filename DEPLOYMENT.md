@@ -25,7 +25,7 @@ Set these in Render dashboard:
 ```env
 APP_NAME=Akon
 APP_ENV=production
-API_VERSION=0.5.6
+API_VERSION=0.5.7
 
 DEFAULT_AI_PROVIDER=gemini
 ALLOW_AI_FALLBACK=false
@@ -44,3 +44,20 @@ PUBLIC_FRONTEND_URL=https://your-vercel-domain.vercel.app
 CORS_ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
 TRUSTED_HOSTS=localhost,127.0.0.1,testserver,*.onrender.com
 EXPOSE_DOCS=false
+
+## Conversation persistence requirement
+
+Akon's conversation history and consent-controlled memories require persistent
+PostgreSQL storage in production.
+
+Do not deploy production with the default local SQLite URL. Render web-service
+filesystems may be replaced during deployment or service restart.
+
+Required production configuration:
+
+```env
+APP_ENV=production
+DATABASE_URL=your-render-postgres-internal-database-url
+```
+
+The backend refuses to start in production when `DATABASE_URL` uses SQLite.

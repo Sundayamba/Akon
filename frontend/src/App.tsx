@@ -56,6 +56,7 @@ type ChatMessage = {
   detectedEmotion?: string | null;
   groundingTool?: GroundingToolItem | null;
   feedbackRating?: FeedbackRating | null;
+  deliveryState?: "sending" | "sent";
 };
 
 type MemoryEditState = {
@@ -68,6 +69,44 @@ type MemoryEditState = {
 };
 
 const ACTIVE_CONVERSATION_KEY = "akon_active_conversation_id";
+
+function getConversationStorageKey(userId: string): string {
+  return `${ACTIVE_CONVERSATION_KEY}:${userId}`;
+}
+
+function getStoredActiveConversationId(userId: string): string | undefined {
+  const scopedKey = getConversationStorageKey(userId);
+  const scopedConversationId = localStorage.getItem(scopedKey);
+
+  if (scopedConversationId) {
+    return scopedConversationId;
+  }
+
+  const legacyConversationId = localStorage.getItem(ACTIVE_CONVERSATION_KEY);
+
+  if (!legacyConversationId) {
+    return undefined;
+  }
+
+  localStorage.setItem(scopedKey, legacyConversationId);
+  localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+
+  return legacyConversationId;
+}
+
+function storeActiveConversationId(
+  userId: string,
+  conversationId: string,
+): void {
+  localStorage.setItem(
+    getConversationStorageKey(userId),
+    conversationId,
+  );
+}
+
+function clearActiveConversationId(userId: string): void {
+  localStorage.removeItem(getConversationStorageKey(userId));
+}
 
 const QUICK_START_PROMPTS = [
   "Help me remember and organize something important.",
@@ -107,18 +146,6 @@ const STUDY_SESSION_PROMPTS = [
 
 const CONTINUE_RESPONSE_PROMPT =
   "Please continue from your previous response without repeating what you already wrote.";
-
-function getStoredActiveConversationId(): string | undefined {
-  return localStorage.getItem(ACTIVE_CONVERSATION_KEY) || undefined;
-}
-
-function storeActiveConversationId(conversationId: string): void {
-  localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversationId);
-}
-
-function clearActiveConversationId(): void {
-  localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
-}
 
 function formatErrorMessage(error: unknown): string {
   const message = getApiErrorMessage(error);
@@ -174,21 +201,41 @@ function formatMessageTimestamp(createdAt: string): string {
   }).format(messageDate);
 }
 
-function formatConversationDate(createdAt?: string | null): string {
+function formatConversationActivity(createdAt?: string | null): string {
   if (!createdAt) {
+    return "No activity yet";
+  }
+
+  const activityDate = new Date(createdAt);
+
+  if (Number.isNaN(activityDate.getTime())) {
     return "Recent";
   }
 
-  const conversationDate = new Date(createdAt);
+  const now = new Date();
 
-  if (Number.isNaN(conversationDate.getTime())) {
-    return "Recent";
+  if (isSameDay(activityDate, now)) {
+    return `Today, ${new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(activityDate)}`;
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (isSameDay(activityDate, yesterday)) {
+    return `Yesterday, ${new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(activityDate)}`;
   }
 
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
-  }).format(conversationDate);
+    year: activityDate.getFullYear() === now.getFullYear() ? undefined : "numeric",
+  }).format(activityDate);
 }
 
 function mapConversationToMessages(
@@ -247,6 +294,8 @@ function App() {
   const chatRequestIdRef = useRef(0);
   const conversationAbortControllerRef = useRef<AbortController | null>(null);
   const chatAbortControllerRef = useRef<AbortController | null>(null);
+  const pendingUserMessageIdRef = useRef<string | null>(null);
+  const pendingUserMessageTextRef = useRef<string | null>(null);
 
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [token, setToken] = useState<string | null>(() => getStoredAccessToken());
@@ -257,9 +306,8 @@ function App() {
   const [displayName, setDisplayName] = useState("Akon User");
 
   const [chatInput, setChatInput] = useState("");
-  const [activeConversationId, setActiveConversationId] = useState<string | undefined>(
-    () => getStoredActiveConversationId(),
-  );
+  const [activeConversationId, setActiveConversationId] =
+    useState<string | undefined>(undefined);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidateItem[]>([]);
 
@@ -354,11 +402,16 @@ function App() {
       return conversations;
     }
 
-    return conversations.filter((conversation) =>
-      (conversation.title || "Untitled conversation")
-        .toLowerCase()
-        .includes(normalizedSearch),
-    );
+    return conversations.filter((conversation) => {
+      const searchableText = [
+        conversation.title || "Untitled conversation",
+        conversation.last_message_preview || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
   }, [conversationSearch, conversations]);
 
   const activeMemoryCount = memories.filter(
@@ -426,10 +479,30 @@ function App() {
     }
   }
 
-  function cancelActiveChatRequest(status = "Generation stopped. You can send a new message.") {
+  function cancelActiveChatRequest(
+    status = "Generation stopped. Your draft was restored.",
+    restoreDraft = true,
+  ) {
     chatAbortControllerRef.current?.abort();
     chatAbortControllerRef.current = null;
     chatRequestIdRef.current += 1;
+
+    const pendingMessageId = pendingUserMessageIdRef.current;
+    const pendingMessageText = pendingUserMessageTextRef.current;
+
+    if (pendingMessageId) {
+      setMessages((current) =>
+        current.filter((message) => message.id !== pendingMessageId),
+      );
+    }
+
+    if (restoreDraft && pendingMessageText) {
+      setChatInput((current) => current || pendingMessageText);
+    }
+
+    pendingUserMessageIdRef.current = null;
+    pendingUserMessageTextRef.current = null;
+
     setIsChatLoading(false);
     setChatActivityLabel(null);
     setStatusMessage(status);
@@ -476,15 +549,35 @@ function App() {
 
       try {
         const user = await getCurrentUser(storedToken);
+
         setToken(storedToken);
         setCurrentUser(user);
 
-        await refreshWorkspace(storedToken);
+        const conversationList = await refreshWorkspace(storedToken);
+        const storedConversationId = getStoredActiveConversationId(user.id);
 
-        const storedConversationId = getStoredActiveConversationId();
+        const recoveryConversationId =
+          storedConversationId &&
+          conversationList.some(
+            (conversation) => conversation.id === storedConversationId,
+          )
+            ? storedConversationId
+            : conversationList[0]?.id;
 
-        if (storedConversationId) {
-          await openConversation(storedToken, storedConversationId, false);
+        if (
+          storedConversationId &&
+          storedConversationId !== recoveryConversationId
+        ) {
+          clearActiveConversationId(user.id);
+        }
+
+        if (recoveryConversationId) {
+          await openConversation(
+            storedToken,
+            recoveryConversationId,
+            false,
+            user.id,
+          );
         }
       } catch {
         resetAuthenticatedState();
@@ -496,9 +589,11 @@ function App() {
     void restoreSession();
   }, []);
 
-  async function refreshWorkspace(authToken = token) {
+  async function refreshWorkspace(
+    authToken = token,
+  ): Promise<ConversationSummary[]> {
     if (!authToken) {
-      return;
+      return [];
     }
 
     setIsWorkspaceLoading(true);
@@ -513,6 +608,8 @@ function App() {
       setMemories(memoryList);
       setConversations(conversationList);
       setAuditLogs(auditList);
+
+      return conversationList;
     } finally {
       setIsWorkspaceLoading(false);
     }
@@ -522,7 +619,15 @@ function App() {
     authToken: string,
     conversationId: string,
     shouldSetStatus = true,
+    storageUserId = currentUser?.id,
   ) {
+    if (chatAbortControllerRef.current) {
+      cancelActiveChatRequest(
+        "Opening saved conversation.",
+        false,
+      );
+    }
+
     const requestId = conversationOpenRequestRef.current + 1;
     conversationOpenRequestRef.current = requestId;
 
@@ -553,7 +658,14 @@ function App() {
       }
 
       setActiveConversationId(conversation.id);
-      storeActiveConversationId(conversation.id);
+
+      if (storageUserId) {
+        storeActiveConversationId(
+          storageUserId,
+          conversation.id,
+        );
+      }
+
       setMessages(mapConversationToMessages(conversation));
       setMemoryCandidates([]);
       setConversationReflection(null);
@@ -570,7 +682,10 @@ function App() {
         return;
       }
 
-      clearActiveConversationId();
+      if (storageUserId) {
+        clearActiveConversationId(storageUserId);
+      }
+
       setActiveConversationId(undefined);
       setErrorMessage(formatErrorMessage(error));
     } finally {
@@ -592,10 +707,11 @@ function App() {
     chatAbortControllerRef.current?.abort();
     chatAbortControllerRef.current = null;
     chatRequestIdRef.current += 1;
+    pendingUserMessageIdRef.current = null;
+    pendingUserMessageTextRef.current = null;
     setIsChatLoading(false);
     setChatActivityLabel(null);
     clearStoredAccessToken();
-    clearActiveConversationId();
     setToken(null);
     setCurrentUser(null);
     setMessages([]);
@@ -636,7 +752,6 @@ function App() {
         password,
       });
 
-      clearActiveConversationId();
       storeAccessToken(login.access_token);
       setToken(login.access_token);
       setCurrentUser(login.user);
@@ -655,9 +770,38 @@ function App() {
       setIsHistoryPanelOpen(false);
       setIsContextPanelOpen(false);
 
-      await refreshWorkspace(login.access_token);
+      const conversationList = await refreshWorkspace(login.access_token);
+      const storedConversationId = getStoredActiveConversationId(login.user.id);
 
-      setStatusMessage("Welcome in. Akon is ready.");
+      const recoveryConversationId =
+        storedConversationId &&
+        conversationList.some(
+          (conversation) => conversation.id === storedConversationId,
+        )
+          ? storedConversationId
+          : conversationList[0]?.id;
+
+      if (
+        storedConversationId &&
+        storedConversationId !== recoveryConversationId
+      ) {
+        clearActiveConversationId(login.user.id);
+      }
+
+      if (recoveryConversationId) {
+        await openConversation(
+          login.access_token,
+          recoveryConversationId,
+          false,
+          login.user.id,
+        );
+      }
+
+      setStatusMessage(
+        recoveryConversationId
+          ? "Welcome back. Your conversation was restored."
+          : "Welcome in. Akon is ready.",
+      );
     } catch (error) {
       setErrorMessage(formatErrorMessage(error));
     } finally {
@@ -672,12 +816,18 @@ function App() {
 
   function handleNewConversation() {
     cancelPendingConversationOpen();
-    chatAbortControllerRef.current?.abort();
-    chatAbortControllerRef.current = null;
-    chatRequestIdRef.current += 1;
-    setIsChatLoading(false);
-    setChatActivityLabel(null);
-    clearActiveConversationId();
+
+    if (chatAbortControllerRef.current) {
+      cancelActiveChatRequest(
+        "New chat started.",
+        false,
+      );
+    }
+
+    if (currentUser) {
+      clearActiveConversationId(currentUser.id);
+    }
+
     setActiveConversationId(undefined);
     setMessages([]);
     setMemoryCandidates([]);
@@ -700,6 +850,32 @@ function App() {
     resetFeedback();
     setChatInput(prompt);
     setStatusMessage("Study session prompt loaded. Add the topic and press Enter.");
+  }
+
+  async function handleToggleHistoryPanel() {
+    const shouldOpen = !isHistoryPanelOpen;
+
+    setIsHistoryPanelOpen(shouldOpen);
+
+    if (!shouldOpen) {
+      return;
+    }
+
+    setIsContextPanelOpen(false);
+
+    if (token) {
+      await refreshWorkspace(token);
+    }
+  }
+
+  function handleToggleMemoryPanel() {
+    const shouldOpen = !isContextPanelOpen;
+
+    setIsContextPanelOpen(shouldOpen);
+
+    if (shouldOpen) {
+      setIsHistoryPanelOpen(false);
+    }
   }
 
   async function handleConversationClick(conversationId: string) {
@@ -774,26 +950,42 @@ function App() {
     try {
       await deleteConversation(token, conversation.id);
 
-      setConversations((current) =>
-        current.filter((currentConversation) => currentConversation.id !== conversation.id),
-      );
-
-      if (activeConversationId === conversation.id) {
-        clearActiveConversationId();
-        setActiveConversationId(undefined);
-        setMessages([]);
-        setMemoryCandidates([]);
-        setConversationReflection(null);
-        setChatInput("");
-      }
-
       if (renamingConversationId === conversation.id) {
         setRenamingConversationId(null);
         setRenameInput("");
       }
 
-      setStatusMessage("Conversation deleted.");
-      await refreshWorkspace(token);
+      const refreshedConversations = await refreshWorkspace(token);
+
+      if (activeConversationId === conversation.id) {
+        if (currentUser) {
+          clearActiveConversationId(currentUser.id);
+        }
+
+        const nextConversation = refreshedConversations[0];
+
+        if (nextConversation) {
+          await openConversation(
+            token,
+            nextConversation.id,
+            false,
+            currentUser?.id,
+          );
+
+          setStatusMessage(
+            "Conversation deleted. Your most recent conversation was restored.",
+          );
+        } else {
+          setActiveConversationId(undefined);
+          setMessages([]);
+          setMemoryCandidates([]);
+          setConversationReflection(null);
+          setChatInput("");
+          setStatusMessage("Conversation deleted.");
+        }
+      } else {
+        setStatusMessage("Conversation deleted.");
+      }
     } catch (error) {
       setErrorMessage(formatErrorMessage(error));
     } finally {
@@ -810,11 +1002,17 @@ function App() {
     }
 
     const trimmedMessage = messageText.trim();
+    const optimisticMessageId = `local-${crypto.randomUUID()}`;
+
+    pendingUserMessageIdRef.current = optimisticMessageId;
+    pendingUserMessageTextRef.current = trimmedMessage;
 
     const userMessage: ChatMessage = {
+      id: optimisticMessageId,
       role: "user",
       content: trimmedMessage,
       createdAt: new Date().toISOString(),
+      deliveryState: "sending",
     };
 
     setMessages((current) => [...current, userMessage]);
@@ -846,7 +1044,12 @@ function App() {
       }
 
       setActiveConversationId(response.conversation_id);
-      storeActiveConversationId(response.conversation_id);
+      if (currentUser) {
+        storeActiveConversationId(
+          currentUser.id,
+          response.conversation_id,
+        );
+      }
       setMemoryCandidates(response.memory_candidates);
 
       const hasStudyNoteCandidate = response.memory_candidates.some(
@@ -861,7 +1064,15 @@ function App() {
       }
 
       setMessages((current) => [
-        ...current,
+        ...current.map((message) =>
+          message.id === optimisticMessageId
+            ? {
+                ...message,
+                id: response.user_message_id || optimisticMessageId,
+                deliveryState: "sent" as const,
+              }
+            : message,
+        ),
         {
           id: response.assistant_message_id,
           role: "assistant",
@@ -874,6 +1085,9 @@ function App() {
         },
       ]);
 
+      pendingUserMessageIdRef.current = null;
+      pendingUserMessageTextRef.current = null;
+
       await refreshWorkspace(token);
     } catch (error) {
       if (
@@ -883,18 +1097,21 @@ function App() {
         return;
       }
 
+      setMessages((current) =>
+        current.filter((message) => message.id !== optimisticMessageId),
+      );
+
+      setChatInput((current) => current || trimmedMessage);
+
+      pendingUserMessageIdRef.current = null;
+      pendingUserMessageTextRef.current = null;
+
       const chatFailureMessage = buildChatFailureMessage(error);
 
       if (isAiProviderUnavailableError(error)) {
-        setMessages((current) => [
-          ...current,
-          {
-            role: "assistant",
-            content: chatFailureMessage,
-            createdAt: new Date().toISOString(),
-          },
-        ]);
-        setStatusMessage("Akon could not complete that reply. Please try again shortly.");
+        setStatusMessage(
+          "Akon could not complete that reply. Your draft was restored.",
+        );
       } else {
         setErrorMessage(chatFailureMessage);
       }
@@ -967,7 +1184,12 @@ function App() {
       }
 
       setActiveConversationId(response.conversation_id);
-      storeActiveConversationId(response.conversation_id);
+      if (currentUser) {
+        storeActiveConversationId(
+          currentUser.id,
+          response.conversation_id,
+        );
+      }
 
       setMessages((current) => [
         ...current,
@@ -1330,7 +1552,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.5.6</p>
+              <p className="eyebrow">Akon AI - v0.5.7</p>
               <h1>Your real-time AI memory companion.</h1>
               <p className="hero-copy">
                 Akon helps you remember what matters, understand faster, translate ideas, prepare answers, and keep useful context under your control.
@@ -1457,7 +1679,18 @@ function App() {
         <section className="sidebar-section">
           <div className="sidebar-section-header">
             <span>History</span>
-            {isWorkspaceLoading && <small>Syncing...</small>}
+            <small>
+              {isWorkspaceLoading
+                ? "Syncing..."
+                : `${conversations.length} saved`}
+            </small>
+          </div>
+
+          <div className="history-continuity-card">
+            <strong>Conversation continuity</strong>
+            <p>
+              Akon restores your saved conversations so you can continue where you stopped.
+            </p>
           </div>
 
           <input
@@ -1539,11 +1772,25 @@ function App() {
                         </strong>
                       </span>
 
+                      <span className="history-preview">
+                        {conversation.last_message_preview ||
+                          "Open this conversation to continue."}
+                      </span>
+
                       <span className="history-meta">
-                        <span className="history-pill">
-                          {conversation.safety_level || "Normal"}
+                        <span className="history-message-count">
+                          {conversation.message_count}{" "}
+                          {conversation.message_count === 1
+                            ? "message"
+                            : "messages"}
                         </span>
-                        <span>{formatConversationDate(conversation.created_at)}</span>
+
+                        <span>
+                          {formatConversationActivity(
+                            conversation.last_message_at ||
+                              conversation.updated_at,
+                          )}
+                        </span>
                       </span>
                     </button>
 
@@ -1606,7 +1853,7 @@ function App() {
                     : "panel-toggle-button"
                 }
                 type="button"
-                onClick={() => setIsHistoryPanelOpen((current) => !current)}
+                onClick={() => void handleToggleHistoryPanel()}
               >
                 History
               </button>
@@ -1618,7 +1865,7 @@ function App() {
                     : "panel-toggle-button"
                 }
                 type="button"
-                onClick={() => setIsContextPanelOpen((current) => !current)}
+                onClick={handleToggleMemoryPanel}
               >
                 Memory
               </button>
@@ -1744,7 +1991,18 @@ function App() {
                     message.role === "assistant" && Boolean(message.id);
 
                   return (
-                    <article className={`message ${message.role}${isStudyRetentionMessage(message.content) ? " study-session-message" : ""}`} key={messageKey}>
+                    <article
+                      className={`message ${message.role}${
+                        isStudyRetentionMessage(message.content)
+                          ? " study-session-message"
+                          : ""
+                      }${
+                        message.deliveryState === "sending"
+                          ? " message-pending"
+                          : ""
+                      }`}
+                      key={messageKey}
+                    >
                       <div className="message-heading">
                         <strong>{message.role === "user" ? "You" : "Akon"}</strong>
 
@@ -1813,6 +2071,11 @@ function App() {
                         <time dateTime={message.createdAt}>
                           {formatMessageTimestamp(message.createdAt)}
                         </time>
+
+                        {message.deliveryState === "sending" && (
+                          <span className="delivery-status">Sending...</span>
+                        )}
+
                         {message.safetyLevel && message.safetyLevel !== "S0" && (
                           <span>Care level: {message.safetyLevel}</span>
                         )}

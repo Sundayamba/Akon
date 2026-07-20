@@ -58,6 +58,7 @@ export type ChatResponse = {
   detected_emotion: string | null;
   grounding_tool: GroundingToolItem | null;
   conversation_id: string;
+  user_message_id: string | null;
   assistant_message_id: string;
   memory_candidates: MemoryCandidateItem[];
 };
@@ -86,6 +87,10 @@ export type ConversationSummary = {
   title: string | null;
   channel: string;
   safety_level: string | null;
+  message_count: number;
+  last_message_preview: string | null;
+  last_message_role: string | null;
+  last_message_at: string | null;
   created_at: string;
   updated_at: string;
 };

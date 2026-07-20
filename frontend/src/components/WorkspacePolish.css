@@ -697,3 +697,245 @@
     max-width: 9rem;
   }
 }
+
+
+/* v0.5.7 persistent conversation continuity */
+.history-continuity-card {
+  display: grid;
+  gap: 0.32rem;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+  border-radius: 15px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.09), transparent 8rem),
+    rgba(248, 250, 255, 0.92);
+  padding: 0.72rem;
+}
+
+.history-continuity-card strong {
+  color: #312e81;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.history-continuity-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.history-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.55rem;
+  align-items: center;
+  color: #94a3b8;
+  font-size: 0.66rem;
+}
+
+.history-message-count {
+  color: #6366f1;
+  font-weight: 850;
+}
+
+.conversation-row.active .history-preview {
+  color: #475569;
+}
+
+.message-pending {
+  opacity: 0.78;
+}
+
+.message-pending .message-actions {
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+.delivery-status {
+  color: #a5b4fc;
+  font-weight: 850;
+}
+
+@media (max-width: 1180px) {
+  .history-continuity-card {
+    margin-top: 0.1rem;
+  }
+}
+
+/* v0.5.7 compact History panel correction */
+
+/*
+  Desktop:
+  toolbar is display:none, so the sidebar has its original three visible rows:
+  sidebar-top / history section / footer.
+*/
+.app-sidebar {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.sidebar-section {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.conversation-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sidebar-footer {
+  position: relative;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+/*
+  Responsive overlay:
+  panel-mobile-toolbar becomes visible and is the first grid child.
+  The sidebar therefore requires four rows.
+*/
+@media (max-width: 1180px) {
+  .app-sidebar {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    gap: 0.65rem;
+    padding: 0.75rem;
+  }
+
+  .panel-mobile-toolbar {
+    margin: -0.75rem -0.75rem 0;
+    padding: 0.62rem 0.72rem;
+  }
+
+  .sidebar-top {
+    gap: 0.55rem;
+  }
+
+  .app-sidebar .sidebar-top .brand-lockup {
+    display: none;
+  }
+
+  .new-chat-button {
+    min-height: 2.45rem;
+    padding: 0.58rem 0.8rem;
+    box-shadow: none;
+  }
+
+  .sidebar-section {
+    grid-template-rows: auto auto auto minmax(0, 1fr);
+    gap: 0.45rem;
+    overflow: hidden;
+  }
+
+  .history-continuity-card {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+    border-radius: 11px;
+    padding: 0.48rem 0.58rem;
+  }
+
+  .history-continuity-card strong {
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+  }
+
+  .history-continuity-card p {
+    overflow: hidden;
+    margin: 0;
+    font-size: 0.66rem;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-search-input {
+    min-height: 2.35rem;
+    border-radius: 12px;
+    padding: 0.58rem 0.7rem;
+  }
+
+  .conversation-list {
+    gap: 0.38rem;
+    padding: 0 0.12rem 0.35rem 0;
+  }
+
+  .conversation-row {
+    border-radius: 14px;
+    padding: 0.22rem;
+  }
+
+  .conversation-item {
+    gap: 0.22rem;
+    padding: 0.5rem 0.55rem;
+  }
+
+  .history-title {
+    font-size: 0.8rem;
+  }
+
+  .history-preview {
+    font-size: 0.67rem;
+    line-height: 1.28;
+    -webkit-line-clamp: 1;
+  }
+
+  .history-meta {
+    font-size: 0.62rem;
+  }
+
+  .conversation-action-row {
+    gap: 0.25rem;
+    padding: 0 0.35rem 0.3rem;
+  }
+
+  .conversation-action-button {
+    min-width: 1.65rem;
+    height: 1.65rem;
+  }
+
+  .sidebar-footer {
+    gap: 0.45rem;
+    margin: 0 -0.75rem -0.75rem;
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    padding: 0.62rem 0.75rem 0.75rem;
+  }
+
+  .user-chip {
+    display: none;
+  }
+
+  .sidebar-footer .compact-button {
+    min-height: 2.2rem;
+    width: 100%;
+    padding: 0.48rem 0.7rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-sidebar {
+    width: min(94vw, 21rem);
+  }
+
+  .history-continuity-card p {
+    display: none;
+  }
+
+  .history-continuity-card strong::after {
+    content: " · Saved and synced";
+    color: #64748b;
+    font-weight: 700;
+  }
+}

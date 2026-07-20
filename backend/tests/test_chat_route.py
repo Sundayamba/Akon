@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.services.llm_provider import LLMProviderError
 from tests.helpers import auth_headers
 
 
@@ -288,3 +289,157 @@ def test_chat_creates_consent_first_study_note_candidate(monkeypatch) -> None:
     assert data["memory_candidates"][0]["consent_required"] is True
     assert data["memory_candidates"][0]["content"].startswith("DNS:")
     assert "Nothing has been saved yet" in data["reply"]
+
+def test_conversation_history_contains_persisted_continuity_metadata(
+    monkeypatch,
+) -> None:
+    headers = auth_headers(
+        client,
+        email="continuity-history@example.com",
+        display_name="Continuity History",
+    )
+
+    def fake_generate_reply(
+        message: str,
+        safety_result: dict,
+        memory_context: str | None = None,
+    ) -> str:
+        return "This is Akon's persisted continuity response for the history preview."
+
+    monkeypatch.setattr(
+        "app.api.routes.chat.generate_akon_reply",
+        fake_generate_reply,
+    )
+
+    create_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={"message": "Create a conversation continuity test."},
+    )
+
+    assert create_response.status_code == 200
+    assert create_response.json()["user_message_id"]
+
+    conversation_id = create_response.json()["conversation_id"]
+
+    history_response = client.get(
+        "/chat/conversations",
+        headers=headers,
+    )
+
+    assert history_response.status_code == 200
+
+    history_item = next(
+        item
+        for item in history_response.json()
+        if item["id"] == conversation_id
+    )
+
+    assert history_item["message_count"] == 2
+    assert history_item["last_message_role"] == "assistant"
+    assert "persisted continuity response" in history_item["last_message_preview"]
+    assert history_item["last_message_at"] is not None
+
+
+def test_existing_conversation_context_is_passed_to_next_reply(
+    monkeypatch,
+) -> None:
+    headers = auth_headers(
+        client,
+        email="conversation-context@example.com",
+        display_name="Conversation Context",
+    )
+
+    captured_contexts: list[str | None] = []
+
+    def fake_generate_reply(
+        message: str,
+        safety_result: dict,
+        memory_context: str | None = None,
+    ) -> str:
+        captured_contexts.append(memory_context)
+        return "Context-aware response."
+
+    monkeypatch.setattr(
+        "app.api.routes.chat.generate_akon_reply",
+        fake_generate_reply,
+    )
+
+    first_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={"message": "My project codename is Horizon."},
+    )
+
+    assert first_response.status_code == 200
+
+    conversation_id = first_response.json()["conversation_id"]
+
+    second_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={
+            "message": "What project codename did I mention?",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert second_response.status_code == 200
+    assert captured_contexts[-1] is not None
+    assert "Horizon" in captured_contexts[-1]
+
+
+def test_failed_ai_request_does_not_create_phantom_conversation(
+    monkeypatch,
+) -> None:
+    headers = auth_headers(
+        client,
+        email="failed-continuity@example.com",
+        display_name="Failed Continuity",
+    )
+
+    before_response = client.get(
+        "/chat/conversations",
+        headers=headers,
+    )
+
+    assert before_response.status_code == 200
+
+    before_ids = {
+        item["id"]
+        for item in before_response.json()
+    }
+
+    def fail_generate_reply(
+        message: str,
+        safety_result: dict,
+        memory_context: str | None = None,
+    ) -> str:
+        raise LLMProviderError("Provider unavailable.")
+
+    monkeypatch.setattr(
+        "app.api.routes.chat.generate_akon_reply",
+        fail_generate_reply,
+    )
+
+    failed_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={"message": "This message must not create an empty conversation."},
+    )
+
+    assert failed_response.status_code == 503
+
+    after_response = client.get(
+        "/chat/conversations",
+        headers=headers,
+    )
+
+    assert after_response.status_code == 200
+
+    after_ids = {
+        item["id"]
+        for item in after_response.json()
+    }
+
+    assert after_ids == before_ids

@@ -15,7 +15,7 @@ DEFAULT_DEV_SECRET = "change-this-dev-secret-before-production"
 class Settings(BaseSettings):
     app_name: str = "Akon"
     app_env: AppEnvironment = "development"
-    api_version: str = "0.5.6"
+    api_version: str = "0.5.7"
 
     secret_key: str = DEFAULT_DEV_SECRET
     jwt_algorithm: str = "HS256"
@@ -160,6 +160,13 @@ class Settings(BaseSettings):
         if not normalized:
             raise ValueError("DATABASE_URL cannot be empty.")
 
+        if normalized.startswith("postgres://"):
+            normalized = normalized.replace(
+                "postgres://",
+                "postgresql://",
+                1,
+            )
+
         return normalized
 
     @field_validator("public_frontend_url", mode="before")
@@ -222,6 +229,12 @@ class Settings(BaseSettings):
             )
 
         if self.app_env == "production":
+            if self.database_url.startswith("sqlite"):
+                raise ValueError(
+                    "Production requires a persistent PostgreSQL DATABASE_URL. "
+                    "SQLite storage can be lost during redeployment."
+                )
+
             if self.secret_key == DEFAULT_DEV_SECRET:
                 raise ValueError(
                     "SECRET_KEY must be changed before running in production."

@@ -66,6 +66,12 @@ class ChatMessageResponse(BaseModel):
         ...,
         description="Conversation ID used for the exchange.",
     )
+    user_message_id: str | None = Field(
+        default=None,
+        description=(
+            "Persisted ID for the user's message when a new exchange is saved."
+        ),
+    )
     assistant_message_id: str = Field(
         ...,
         description="Message ID for Akon's reply. Used for optional quality feedback.",
@@ -91,9 +97,12 @@ class ConversationSummary(BaseModel):
     title: str | None = None
     channel: str
     safety_level: str | None = None
+    message_count: int = Field(default=0, ge=0)
+    last_message_preview: str | None = None
+    last_message_role: str | None = None
+    last_message_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
-
 
 class ConversationDetailResponse(BaseModel):
     id: str

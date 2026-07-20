@@ -195,3 +195,19 @@ Added direction:
 - The candidate is never saved silently.
 - Users must review and approve the study note before persistence.
 - Crisis and high-risk safety flows remain excluded from memory extraction.
+
+
+## v0.5.7 Persistent Conversation Continuity and Recovery
+
+This milestone makes conversation history a dependable product capability
+rather than a temporary sidebar view.
+
+- Complete message threads remain stored on the backend.
+- Conversation summaries include message counts and latest-message previews.
+- History is ordered by recent persisted activity.
+- Active-conversation recovery is isolated per authenticated user.
+- Refreshing or signing back in restores the most recent valid conversation.
+- Invalid or deleted recovery IDs are removed safely.
+- Cancelled and failed optimistic messages do not remain as false chat history.
+- Switching conversations cancels incompatible in-progress generation.
+- Production requires persistent PostgreSQL storage.

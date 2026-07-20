@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,10 +25,12 @@ from app.schemas.chat import (
 from app.services.akon_engine import generate_akon_reply
 from app.services.audit_service import create_audit_log
 from app.services.auth_service import get_current_user
+from app.services.conversation_continuity_service import build_conversation_summaries
 from app.services.llm_provider import LLMProviderError
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
-from app.services.reflection_service import build_conversation_reflection
+from app.services.reflection_service import build_conversation_reflection
+
 from app.services.study_note_candidate_service import build_study_note_candidate
 from app.services.safety_service import classify_safety
 from app.services.support_strategy_service import get_grounding_tool
@@ -526,6 +529,7 @@ def send_chat_message(
         )
 
     conversation.safety_level = safety_level
+    conversation.updated_at = datetime.now(UTC)
 
     user_message = Message(
         conversation_id=conversation.id,
@@ -580,6 +584,7 @@ def send_chat_message(
         detected_emotion=detected_emotion,
         grounding_tool=grounding_tool,
         conversation_id=conversation.id,
+        user_message_id=user_message.id,
         assistant_message_id=assistant_message.id,
         memory_candidates=memory_candidates,
     )
@@ -663,6 +668,7 @@ def regenerate_assistant_message(
     )
 
     conversation.safety_level = safety_level
+    conversation.updated_at = datetime.now(UTC)
 
     assistant_message = Message(
         conversation_id=conversation.id,
@@ -854,15 +860,20 @@ def list_conversations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[ConversationSummary]:
-    conversations = db.scalars(
-        select(Conversation)
-        .where(Conversation.user_id == current_user.id)
-        .order_by(Conversation.updated_at.desc())
-        .limit(50)
-    ).all()
+    conversations = list(
+        db.scalars(
+            select(Conversation)
+            .where(Conversation.user_id == current_user.id)
+            .order_by(Conversation.updated_at.desc())
+            .limit(50)
+        ).all()
+    )
 
-    return [_conversation_to_summary(conversation) for conversation in conversations]
-
+    return build_conversation_summaries(
+        db=db,
+        conversations=conversations,
+        user_id=current_user.id,
+    )
 
 @router.get(
     "/conversations/{conversation_id}",
@@ -957,7 +968,11 @@ def update_conversation(
     db.commit()
     db.refresh(conversation)
 
-    return _conversation_to_summary(conversation)
+    return build_conversation_summaries(
+        db=db,
+        conversations=[conversation],
+        user_id=current_user.id,
+    )[0]
 
 
 @router.delete(
