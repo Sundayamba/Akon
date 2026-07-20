@@ -555,3 +555,145 @@
     opacity: 1;
   }
 }
+
+/* v0.5.6 study note approval flow */
+.study-note-candidate {
+  border-color: rgba(79, 70, 229, 0.22);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.1), transparent 10rem),
+    rgba(248, 250, 255, 0.96);
+  box-shadow: 0 14px 32px rgba(79, 70, 229, 0.09);
+}
+
+.candidate-type-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.candidate-type-row strong {
+  color: #312e81;
+  font-size: 0.88rem;
+  text-transform: capitalize;
+}
+
+.candidate-type-row span {
+  border: 1px solid rgba(79, 70, 229, 0.16);
+  border-radius: 999px;
+  background: rgba(238, 242, 255, 0.92);
+  color: #3730a3;
+  font-size: 0.64rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  padding: 0.28rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.study-note-candidate > p {
+  color: #334155;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.study-note-candidate .candidate-actions button:first-child {
+  background: linear-gradient(135deg, #312e81, #4f46e5);
+}
+
+/* v0.5.6 responsive Memory panel visibility fix */
+@media (max-width: 1180px) {
+  .product-shell:not(.context-collapsed) .context-panel {
+    display: grid;
+  }
+
+  .product-shell:not(.history-collapsed) .app-sidebar {
+    display: grid;
+  }
+}
+
+/* v0.5.6 panel navigation controls */
+.panel-mobile-toolbar {
+  position: sticky;
+  z-index: 15;
+  top: 0;
+  display: none;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  margin: -1rem -1rem 0;
+  padding: 0.72rem 0.8rem;
+  backdrop-filter: blur(18px);
+}
+
+.panel-mobile-toolbar > div {
+  min-width: 0;
+}
+
+.panel-mobile-toolbar span,
+.panel-mobile-toolbar small {
+  display: block;
+}
+
+.panel-mobile-toolbar > div > span {
+  color: #111827;
+  font-size: 0.92rem;
+  font-weight: 950;
+}
+
+.panel-mobile-toolbar small {
+  overflow: hidden;
+  margin-top: 0.12rem;
+  color: #64748b;
+  font-size: 0.67rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-close-button {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  align-items: center;
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  background: rgba(248, 250, 252, 0.96);
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 0.42rem 0.58rem;
+  box-shadow: none;
+}
+
+.panel-close-button:hover {
+  background: #eef2ff;
+  color: #3730a3;
+  box-shadow: none;
+}
+
+.panel-close-button > span {
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+@media (max-width: 1180px) {
+  .panel-mobile-toolbar {
+    display: flex;
+  }
+
+  .app-sidebar,
+  .context-panel {
+    padding-top: 1rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .panel-close-button {
+    width: auto;
+  }
+
+  .panel-mobile-toolbar small {
+    max-width: 9rem;
+  }
+}

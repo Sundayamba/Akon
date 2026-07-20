@@ -232,3 +232,59 @@ def test_user_cannot_access_another_users_conversation() -> None:
     )
 
     assert unauthorized_response.status_code == 404
+
+def test_chat_creates_consent_first_study_note_candidate(monkeypatch) -> None:
+    headers = auth_headers(
+        client,
+        email="study-note-flow@example.com",
+        display_name="Study Note User",
+    )
+
+    def fake_generate_reply(
+        message: str,
+        safety_result: dict,
+        memory_context: str | None = None,
+    ) -> str:
+        if "teach me dns" in message.lower():
+            return (
+                "DNS means Domain Name System. It translates readable domain names "
+                "into IP addresses that computers use to find systems on a network. "
+                "DNS commonly uses port 53 and is essential for normal web browsing."
+            )
+
+        return "Preparing the study note review."
+
+    monkeypatch.setattr(
+        "app.api.routes.chat.generate_akon_reply",
+        fake_generate_reply,
+    )
+
+    lesson_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={"message": "Teach me DNS so I will remember it."},
+    )
+
+    assert lesson_response.status_code == 200
+
+    conversation_id = lesson_response.json()["conversation_id"]
+
+    candidate_response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={
+            "message": "Turn this lesson into a study note.",
+            "conversation_id": conversation_id,
+        },
+    )
+
+    assert candidate_response.status_code == 200
+
+    data = candidate_response.json()
+
+    assert len(data["memory_candidates"]) == 1
+    assert data["memory_candidates"][0]["memory_type"] == "study_note"
+    assert data["memory_candidates"][0]["source"] == "study_session_candidate"
+    assert data["memory_candidates"][0]["consent_required"] is True
+    assert data["memory_candidates"][0]["content"].startswith("DNS:")
+    assert "Nothing has been saved yet" in data["reply"]

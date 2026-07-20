@@ -139,7 +139,7 @@ Akon is:
 
 ## Current milestone
 
-v0.5.5 introduces Study Session UI on top of Study Retention Mode.
+v0.5.6 introduces a consent-first Study Note Approval Flow.
 
 The goal is not to build wearable hardware yet. The goal is to align the product identity,
 system behavior, frontend language, and documentation with the long-term memory companion
@@ -180,3 +180,18 @@ Added direction:
 - Study-mode replies receive visual treatment so users can recognize learning sessions quickly.
 - The workspace now surfaces study-session activity as part of the top metrics.
 - This prepares Akon for a richer learning workspace with session tracking, progress, quizzes, and saved study notes.
+
+## v0.5.6 Study Note Approval Flow
+
+This milestone connects Study Retention Mode to Akon's consent-controlled
+memory system.
+
+Added direction:
+
+- Users can request a study note from the recent lesson.
+- Akon derives the candidate from its latest substantive teaching response.
+- Raw Markdown is cleaned before the candidate is displayed.
+- The Memory panel opens automatically when a study note is ready.
+- The candidate is never saved silently.
+- Users must review and approve the study note before persistence.
+- Crisis and high-risk safety flows remain excluded from memory extraction.

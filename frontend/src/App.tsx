@@ -369,9 +369,48 @@ function App() {
     (message) => message.role === "assistant" && isStudyRetentionMessage(message.content),
   ).length;
 
+  useEffect(() => {
+    const hasStudyNoteCandidate = memoryCandidates.some(
+      (candidate) => candidate.memory_type === "study_note",
+    );
+
+    if (!hasStudyNoteCandidate) {
+      return;
+    }
+
+    setIsHistoryPanelOpen(false);
+    setIsContextPanelOpen(true);
+
+    const frameId = window.requestAnimationFrame(() => {
+      document.querySelector(".study-note-candidate")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [memoryCandidates]);
+
   const canReflectOnConversation = Boolean(
     token && activeConversationId && messages.length >= 2 && !isReflectionLoading,
   );
+
+  useEffect(() => {
+    function handlePanelEscape(event: globalThis.KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      setIsHistoryPanelOpen(false);
+      setIsContextPanelOpen(false);
+    }
+
+    window.addEventListener("keydown", handlePanelEscape);
+
+    return () => {
+      window.removeEventListener("keydown", handlePanelEscape);
+    };
+  }, []);
 
   function cancelPendingConversationOpen() {
     conversationOpenRequestRef.current += 1;
@@ -810,6 +849,17 @@ function App() {
       storeActiveConversationId(response.conversation_id);
       setMemoryCandidates(response.memory_candidates);
 
+      const hasStudyNoteCandidate = response.memory_candidates.some(
+        (candidate) => candidate.memory_type === "study_note",
+      );
+
+      if (hasStudyNoteCandidate) {
+        setIsContextPanelOpen(true);
+        setStatusMessage(
+          "Study note ready for review. Nothing will be saved until you approve it.",
+        );
+      }
+
       setMessages((current) => [
         ...current,
         {
@@ -1135,7 +1185,11 @@ function App() {
     try {
       await confirmMemoryCandidate(token, candidate);
       setMemoryCandidates((current) => removeCandidateAtIndex(current, candidateIndex));
-      setStatusMessage("Memory approved and saved.");
+      setStatusMessage(
+        candidate.memory_type === "study_note"
+          ? "Study note approved and saved."
+          : "Memory approved and saved.",
+      );
       await refreshWorkspace(token);
     } catch (error) {
       setErrorMessage(formatErrorMessage(error));
@@ -1276,7 +1330,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.5.5</p>
+              <p className="eyebrow">Akon AI - v0.5.6</p>
               <h1>Your real-time AI memory companion.</h1>
               <p className="hero-copy">
                 Akon helps you remember what matters, understand faster, translate ideas, prepare answers, and keep useful context under your control.
@@ -1369,6 +1423,23 @@ function App() {
   return (
     <main className={shellClassName}>
       <aside className="app-sidebar">
+          <div className="panel-mobile-toolbar">
+            <div>
+              <span>History</span>
+              <small>Your saved conversations</small>
+            </div>
+
+            <button
+              className="panel-close-button"
+              type="button"
+              aria-label="Close History and return to chat"
+              title="Back to chat"
+              onClick={() => setIsHistoryPanelOpen(false)}
+            >
+              <span aria-hidden="true">←</span>
+              Back to chat
+            </button>
+          </div>
         <div className="sidebar-top">
           <div className="brand-lockup">
             <div className="brand-mark">A</div>
@@ -1872,6 +1943,23 @@ function App() {
       </section>
 
       <aside className="context-panel">
+          <div className="panel-mobile-toolbar">
+            <div>
+              <span>Memory</span>
+              <small>Review and manage Akon memory</small>
+            </div>
+
+            <button
+              className="panel-close-button"
+              type="button"
+              aria-label="Close Memory and return to chat"
+              title="Back to chat"
+              onClick={() => setIsContextPanelOpen(false)}
+            >
+              <span aria-hidden="true">←</span>
+              Back to chat
+            </button>
+          </div>
         <section className="context-card study-context-card">
           <div className="card-header">
             <p className="eyebrow">Study session</p>
@@ -1961,10 +2049,25 @@ function App() {
             <div className="scroll-list">
               {memoryCandidates.map((candidate, index) => (
                 <div
-                  className="mini-item warm candidate-card"
+                  className={
+                    candidate.memory_type === "study_note"
+                      ? "mini-item warm candidate-card study-note-candidate"
+                      : "mini-item warm candidate-card"
+                  }
                   key={`${candidate.memory_type}-${candidate.content}-${index}`}
                 >
-                  <strong>{candidate.memory_type}</strong>
+                  <div className="candidate-type-row">
+                    <strong>
+                      {candidate.memory_type === "study_note"
+                        ? "Study note"
+                        : candidate.memory_type}
+                    </strong>
+
+                    {candidate.memory_type === "study_note" && (
+                      <span>Review required</span>
+                    )}
+                  </div>
+
                   <p>{candidate.content}</p>
                   <small>{candidate.reason}</small>
 

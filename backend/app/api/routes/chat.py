@@ -27,7 +27,8 @@ from app.services.auth_service import get_current_user
 from app.services.llm_provider import LLMProviderError
 from app.services.memory_extraction_service import extract_memory_candidates
 from app.services.memory_service import retrieve_memory_context
-from app.services.reflection_service import build_conversation_reflection
+from app.services.reflection_service import build_conversation_reflection
+from app.services.study_note_candidate_service import build_study_note_candidate
 from app.services.safety_service import classify_safety
 from app.services.support_strategy_service import get_grounding_tool
 
@@ -415,11 +416,21 @@ def _raise_ai_unavailable_error() -> None:
 def _build_memory_candidates(
     message: str,
     safety_result: dict,
+    conversation_messages: list[Message] | None = None,
 ) -> list[MemoryCandidateItem]:
-    memory_candidates_raw = extract_memory_candidates(
+    study_note_candidate = build_study_note_candidate(
         message=message,
         safety_result=safety_result,
+        conversation_messages=conversation_messages or [],
     )
+
+    if study_note_candidate is not None:
+        memory_candidates_raw = [study_note_candidate]
+    else:
+        memory_candidates_raw = extract_memory_candidates(
+            message=message,
+            safety_result=safety_result,
+        )
 
     return [
         MemoryCandidateItem(
@@ -433,7 +444,6 @@ def _build_memory_candidates(
         )
         for candidate in memory_candidates_raw
     ]
-
 
 @router.post("/message", response_model=ChatMessageResponse)
 def send_chat_message(
@@ -498,7 +508,22 @@ def send_chat_message(
     memory_candidates = _build_memory_candidates(
         message=payload.message,
         safety_result=safety_result,
+        conversation_messages=existing_messages,
     )
+
+    has_study_note_candidate = any(
+        candidate.memory_type == "study_note"
+        and candidate.source == "study_session_candidate"
+        for candidate in memory_candidates
+    )
+
+    if has_study_note_candidate:
+        reply = (
+            "Study note ready for review\n\n"
+            "I prepared a concise study-note candidate from the recent lesson. "
+            "Review it in Memory and approve it only if it accurately captures what "
+            "you want Akon to remember. Nothing has been saved yet."
+        )
 
     conversation.safety_level = safety_level
 
