@@ -1799,7 +1799,7 @@ function App() {
             <p className="eyebrow">Memory</p>
             <h2>Memory core</h2>
             <p>
-              Add approved context, study notes, goals, people, preferences, or useful details so Akon can help you recall them later.
+              Add approved context, study notes, people, projects, decisions, preferences, or facts so Akon can help you recall them later.
             </p>
           </div>
 
@@ -1812,6 +1812,12 @@ function App() {
               >
                 <option value="preference">Preference</option>
                 <option value="goal">Goal</option>
+                <option value="study_note">Study note</option>
+                <option value="fact">Fact</option>
+                <option value="person">Person</option>
+                <option value="project">Project</option>
+                <option value="decision">Decision</option>
+                <option value="language">Language</option>
                 <option value="constraint">Constraint</option>
                 <option value="emotional_baseline">Emotional baseline</option>
                 <option value="cultural_context">Cultural context</option>
@@ -1822,7 +1828,7 @@ function App() {
               What should Akon help you remember?
               <textarea
                 value={memoryContent}
-                placeholder="Example: I want Akon to help me remember what I study and explain it back clearly."
+                placeholder="Example: Python decorators wrap a function to add behavior before or after it runs."
                 onChange={(event) => setMemoryContent(event.target.value)}
               />
             </label>
@@ -1912,6 +1918,12 @@ function App() {
                         >
                           <option value="preference">Preference</option>
                           <option value="goal">Goal</option>
+                <option value="study_note">Study note</option>
+                <option value="fact">Fact</option>
+                <option value="person">Person</option>
+                <option value="project">Project</option>
+                <option value="decision">Decision</option>
+                <option value="language">Language</option>
                           <option value="constraint">Constraint</option>
                           <option value="emotional_baseline">Emotional baseline</option>
                           <option value="cultural_context">Cultural context</option>

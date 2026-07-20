@@ -26,14 +26,21 @@ SENSITIVE_KEYWORDS = [
     "pin",
 ]
 
-
 PERSISTENCE_MARKERS = [
     "remember that",
     "remember this",
     "please remember",
+    "help me remember",
     "save this",
+    "save that",
+    "store this",
+    "store that",
+    "add this to memory",
+    "add that to memory",
     "note that",
     "keep in mind",
+    "don't forget",
+    "do not forget",
     "from now on",
     "going forward",
 ]
@@ -53,6 +60,145 @@ ONE_OFF_TASK_STARTERS = [
     "rewrite ",
     "draft ",
     "compose ",
+]
+
+MEMORY_TYPE_SIGNALS: list[tuple[str, list[str]]] = [
+    (
+        "preference",
+        [
+            "i prefer",
+            "i like",
+            "i don't like",
+            "i dont like",
+            "i hate",
+            "from now on",
+            "going forward",
+        ],
+    ),
+    (
+        "goal",
+        [
+            "my goal is",
+            "i want to become",
+            "i want to build",
+            "i want to start",
+            "i want to learn",
+            "i want to master",
+            "i plan to",
+        ],
+    ),
+    (
+        "constraint",
+        [
+            "i can only",
+            "i don't have",
+            "i dont have",
+            "i have limited",
+            "i struggle with",
+            "my problem is",
+            "my limitation is",
+        ],
+    ),
+    (
+        "project",
+        [
+            "project",
+            "app",
+            "platform",
+            "repo",
+            "github",
+            "roadmap",
+            "milestone",
+            "version",
+            "feature",
+            "product",
+            "i am building",
+            "i'm building",
+            "im building",
+        ],
+    ),
+    (
+        "person",
+        [
+            "his name is",
+            "her name is",
+            "their name is",
+            "my boss",
+            "my friend",
+            "my manager",
+            "my teacher",
+            "my client",
+            "my customer",
+            "my brother",
+            "my sister",
+        ],
+    ),
+    (
+        "decision",
+        [
+            "i decided",
+            "we decided",
+            "i chose",
+            "we chose",
+            "i agreed",
+            "we agreed",
+            "the decision is",
+            "final decision",
+        ],
+    ),
+    (
+        "language",
+        [
+            "translate",
+            "translation",
+            "language",
+            "spanish",
+            "mandarin",
+            "french",
+            "english",
+            "twi",
+            "yoruba",
+            "igbo",
+            "hausa",
+        ],
+    ),
+    (
+        "study_note",
+        [
+            "i studied",
+            "i am studying",
+            "i'm studying",
+            "exam",
+            "quiz",
+            "lesson",
+            "course",
+            "topic",
+            "revision",
+            "retention",
+            "remember what i studied",
+        ],
+    ),
+    (
+        "cultural_context",
+        [
+            "in my culture",
+            "traditionally",
+            "my family expects",
+            "where i come from",
+            "in my tradition",
+        ],
+    ),
+    (
+        "emotional_baseline",
+        [
+            "i usually feel",
+            "i often feel",
+            "i always feel",
+            "i get overwhelmed when",
+            "i get anxious when",
+            "i get stressed when",
+        ],
+    ),
 ]
 
 
@@ -83,23 +229,12 @@ def _looks_like_one_off_task(normalized_message: str) -> bool:
     return any(normalized_message.startswith(starter) for starter in ONE_OFF_TASK_STARTERS)
 
 
-def _deduplicate_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen: set[tuple[str, str]] = set()
-    unique_candidates: list[dict[str, Any]] = []
+def _infer_memory_type(normalized: str) -> str:
+    for memory_type, signals in MEMORY_TYPE_SIGNALS:
+        if any(signal in normalized for signal in signals):
+            return memory_type
 
-    for candidate in candidates:
-        key = (
-            candidate["memory_type"],
-            _normalize_text(candidate["content"]),
-        )
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-        unique_candidates.append(candidate)
-
-    return unique_candidates
+    return "fact"
 
 
 def _build_candidate(
@@ -126,22 +261,6 @@ def _build_candidate(
     }
 
 
-def _candidate_from_explicit_memory_request(message: str, normalized: str) -> dict[str, Any]:
-    if "goal" in normalized or "i want to become" in normalized or "i want to build" in normalized:
-        return _build_candidate("goal", message, confidence="high")
-
-    if "i can only" in normalized or "i don't have" in normalized or "i dont have" in normalized:
-        return _build_candidate("constraint", message, confidence="high")
-
-    if "culture" in normalized or "tradition" in normalized or "family expects" in normalized:
-        return _build_candidate("cultural_context", message, confidence="high")
-
-    if "overwhelmed" in normalized or "anxious" in normalized or "stressed" in normalized:
-        return _build_candidate("emotional_baseline", message, confidence="high")
-
-    return _build_candidate("preference", message, confidence="high")
-
-
 def _extract_after_marker(message: str, marker_pattern: str) -> str:
     match = re.search(marker_pattern, message, flags=re.IGNORECASE)
 
@@ -151,6 +270,34 @@ def _extract_after_marker(message: str, marker_pattern: str) -> str:
     extracted = message[match.end() :].strip(" .,:;-")
 
     return extracted or message
+
+
+def _candidate_from_explicit_memory_request(message: str) -> dict[str, Any]:
+    content = _extract_after_marker(
+        message,
+        r"\b(remember that|remember this|please remember|help me remember|save this|save that|store this|store that|add this to memory|add that to memory|note that|keep in mind|don't forget|do not forget)\b",
+    )
+    normalized_content = _normalize_text(content)
+    memory_type = _infer_memory_type(normalized_content)
+
+    return _build_candidate(
+        memory_type=memory_type,
+        content=content,
+        source="explicit_memory_request",
+        confidence="high",
+    )
+
+
+def _candidate_from_primary_signal(message: str, normalized: str) -> dict[str, Any] | None:
+    memory_type = _infer_memory_type(normalized)
+
+    if memory_type == "fact":
+        return None
+
+    return _build_candidate(
+        memory_type=memory_type,
+        content=message,
+    )
 
 
 def extract_memory_candidates(
@@ -167,6 +314,8 @@ def extract_memory_candidates(
     - S3/S4/S5 safety messages are excluded from normal memory extraction.
     - One-off task requests should not become memory unless the user clearly asks
       Akon to remember them.
+    - v0.5.3 recognizes study notes, facts, people, projects, decisions, and language context.
+    - One user message should create one primary memory candidate to avoid noisy duplicates.
     """
     safety_level = safety_result.get("level", "S0")
 
@@ -174,118 +323,20 @@ def extract_memory_candidates(
         return []
 
     normalized = _normalize_text(message)
-    candidates: list[dict[str, Any]] = []
-
     has_persistence_marker = _has_persistence_marker(normalized)
 
     if _looks_like_one_off_task(normalized) and not has_persistence_marker:
         return []
 
     if has_persistence_marker:
-        candidates.append(_candidate_from_explicit_memory_request(message, normalized))
+        return [_candidate_from_explicit_memory_request(message)]
 
-    preference_markers = [
-        "i prefer",
-        "i like",
-        "i don't like",
-        "i dont like",
-        "i hate",
-        "from now on",
-        "going forward",
-    ]
+    candidate = _candidate_from_primary_signal(
+        message=message,
+        normalized=normalized,
+    )
 
-    goal_markers = [
-        "my goal is",
-        "i want to become",
-        "i want to build",
-        "i am building",
-        "i'm building",
-        "im building",
-    ]
+    if candidate is None:
+        return []
 
-    learning_goal_markers = [
-        "i want to learn",
-        "i want to master",
-    ]
-
-    constraint_markers = [
-        "i can only",
-        "i don't have",
-        "i dont have",
-        "i have limited",
-        "i struggle with",
-        "my problem is",
-    ]
-
-    cultural_markers = [
-        "in my culture",
-        "traditionally",
-        "my family expects",
-        "where i come from",
-        "in my tradition",
-    ]
-
-    emotional_baseline_markers = [
-        "i usually feel",
-        "i often feel",
-        "i always feel",
-        "i get overwhelmed when",
-        "i get anxious when",
-        "i get stressed when",
-    ]
-
-    if any(marker in normalized for marker in preference_markers):
-        candidates.append(
-            _build_candidate(
-                memory_type="preference",
-                content=message,
-            )
-        )
-
-    if any(marker in normalized for marker in goal_markers):
-        candidates.append(
-            _build_candidate(
-                memory_type="goal",
-                content=message,
-            )
-        )
-
-    if any(marker in normalized for marker in learning_goal_markers):
-        content = _extract_after_marker(
-            message,
-            r"\bi want to (learn|master)\b",
-        )
-
-        if len(_normalize_text(content).split()) >= 2:
-            candidates.append(
-                _build_candidate(
-                    memory_type="goal",
-                    content=message,
-                )
-            )
-
-    if any(marker in normalized for marker in constraint_markers):
-        candidates.append(
-            _build_candidate(
-                memory_type="constraint",
-                content=message,
-            )
-        )
-
-    if any(marker in normalized for marker in cultural_markers):
-        candidates.append(
-            _build_candidate(
-                memory_type="cultural_context",
-                content=message,
-            )
-        )
-
-    if any(marker in normalized for marker in emotional_baseline_markers):
-        candidates.append(
-            _build_candidate(
-                memory_type="emotional_baseline",
-                content=message,
-            )
-        )
-
-    return _deduplicate_candidates(candidates)[:3]
+    return [candidate]

@@ -139,8 +139,20 @@ Akon is:
 
 ## Current milestone
 
-v0.5.2 introduces the human memory companion foundation.
+v0.5.3 introduces memory recall workflows on top of the human memory companion foundation.
 
 The goal is not to build wearable hardware yet. The goal is to align the product identity,
 system behavior, frontend language, and documentation with the long-term memory companion
 vision.
+
+## v0.5.3 Memory Recall Workflows
+
+This milestone strengthens Akon's memory behavior without adding new database tables.
+
+Added direction:
+
+- Akon should recognize recall-style messages such as "what do you remember about..." and "remind me about..."
+- Akon should handle "help me remember this" as an explicit memory candidate.
+- Study notes, people, projects, decisions, facts, and language context are now treated as stronger memory categories.
+- High-sensitivity memory should not be broadly surfaced unless the user's recall query overlaps that memory.
+- Recall responses should be honest when saved memory is not enough.
