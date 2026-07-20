@@ -1388,3 +1388,165 @@ h3 {
     width: 100%;
   }
 }
+
+/* v0.5.5 Study Session UI */
+.study-session-dashboard {
+  display: grid;
+  width: min(100%, 44rem);
+  gap: 0.85rem;
+  border: 1px solid rgba(79, 70, 229, 0.16);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.1), transparent 12rem),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, 0.1), transparent 12rem),
+    rgba(255, 255, 255, 0.86);
+  box-shadow:
+    0 18px 48px rgba(79, 70, 229, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  margin-top: 0.35rem;
+  padding: 1rem;
+  text-align: left;
+}
+
+.study-session-header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.study-session-header span,
+.study-context-card .eyebrow {
+  color: #4f46e5;
+}
+
+.study-session-header span {
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.study-session-header strong {
+  color: #111827;
+  font-size: clamp(1rem, 2vw, 1.25rem);
+}
+
+.study-step-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.study-step-row span {
+  border: 1px solid rgba(79, 70, 229, 0.14);
+  border-radius: 999px;
+  background: rgba(238, 242, 255, 0.78);
+  color: #3730a3;
+  font-size: 0.75rem;
+  font-weight: 860;
+  padding: 0.42rem 0.62rem;
+}
+
+.study-action-row,
+.study-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.study-action-button {
+  border: 1px solid rgba(79, 70, 229, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  color: #3730a3;
+  font-size: 0.82rem;
+  padding: 0.62rem 0.8rem;
+  box-shadow: none;
+}
+
+.study-action-button:hover {
+  background: rgba(238, 242, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.1);
+}
+
+.message.assistant.study-session-message {
+  max-width: min(54rem, 92%);
+  border-color: rgba(79, 70, 229, 0.2);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(238, 242, 255, 0.86)),
+    rgba(255, 255, 255, 0.94);
+  box-shadow:
+    0 18px 44px rgba(79, 70, 229, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.message.assistant.study-session-message .message-heading strong::after {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid rgba(79, 70, 229, 0.16);
+  border-radius: 999px;
+  background: rgba(238, 242, 255, 0.9);
+  color: #3730a3;
+  content: "Study";
+  font-size: 0.65rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  margin-left: 0.5rem;
+  padding: 0.22rem 0.42rem;
+  text-transform: uppercase;
+}
+
+.study-context-card {
+  border-color: rgba(79, 70, 229, 0.14);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(79, 70, 229, 0.1), transparent 11rem),
+    rgba(255, 255, 255, 0.88);
+}
+
+.study-step-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.study-step-item {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.78);
+  padding: 0.58rem 0.65rem;
+}
+
+.study-step-item span {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.study-step-item strong {
+  color: #1f2937;
+  font-size: 0.84rem;
+}
+
+.study-panel-actions button {
+  font-size: 0.78rem;
+  padding: 0.56rem 0.68rem;
+}
+
+@media (max-width: 620px) {
+  .study-action-row,
+  .study-panel-actions {
+    display: grid;
+  }
+
+  .study-action-button,
+  .study-panel-actions button {
+    width: 100%;
+  }
+}

@@ -15,7 +15,7 @@ DEFAULT_DEV_SECRET = "change-this-dev-secret-before-production"
 class Settings(BaseSettings):
     app_name: str = "Akon"
     app_env: AppEnvironment = "development"
-    api_version: str = "0.5.4"
+    api_version: str = "0.5.5"
 
     secret_key: str = DEFAULT_DEV_SECRET
     jwt_algorithm: str = "HS256"

@@ -78,6 +78,33 @@ const QUICK_START_PROMPTS = [
   "Help me turn this idea into a clear next step.",
 ];
 
+const STUDY_SESSION_STEPS = [
+  "Understand",
+  "Compress",
+  "Recall",
+  "Quiz",
+  "Save",
+];
+
+const STUDY_SESSION_PROMPTS = [
+  {
+    label: "Start session",
+    prompt: "Start Study Retention Mode for this topic: ",
+  },
+  {
+    label: "Quiz me",
+    prompt: "Quiz me on this topic with multiple-choice and theory questions: ",
+  },
+  {
+    label: "Recall check",
+    prompt: "Ask me to recall this topic in my own words and correct me: ",
+  },
+  {
+    label: "Save study note",
+    prompt: "Help me turn this lesson into a study-note memory: ",
+  },
+];
+
 const CONTINUE_RESPONSE_PROMPT =
   "Please continue from your previous response without repeating what you already wrote.";
 
@@ -199,6 +226,19 @@ function buildMemoryEditState(memory: MemoryItem): MemoryEditState {
 
 function getLastUserMessage(messages: ChatMessage[]): ChatMessage | undefined {
   return [...messages].reverse().find((message) => message.role === "user");
+}
+
+function isStudyRetentionMessage(content: string): boolean {
+  const normalizedContent = content.toLowerCase();
+
+  return (
+    normalizedContent.includes("study retention mode") ||
+    normalizedContent.includes("understand it") ||
+    normalizedContent.includes("compress it") ||
+    normalizedContent.includes("recall it") ||
+    normalizedContent.includes("quiz it") ||
+    normalizedContent.includes("save the key point")
+  );
 }
 
 function App() {
@@ -323,6 +363,10 @@ function App() {
 
   const activeMemoryCount = memories.filter(
     (memory) => memory.consent_state !== "revoked",
+  ).length;
+
+  const studySessionCount = messages.filter(
+    (message) => message.role === "assistant" && isStudyRetentionMessage(message.content),
   ).length;
 
   const canReflectOnConversation = Boolean(
@@ -611,6 +655,12 @@ function App() {
   function handleQuickPrompt(prompt: string) {
     resetFeedback();
     setChatInput(prompt);
+  }
+
+  function handleStudySessionPrompt(prompt: string) {
+    resetFeedback();
+    setChatInput(prompt);
+    setStatusMessage("Study session prompt loaded. Add the topic and press Enter.");
   }
 
   async function handleConversationClick(conversationId: string) {
@@ -1226,7 +1276,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.5.4</p>
+              <p className="eyebrow">Akon AI - v0.5.5</p>
               <h1>Your real-time AI memory companion.</h1>
               <p className="hero-copy">
                 Akon helps you remember what matters, understand faster, translate ideas, prepare answers, and keep useful context under your control.
@@ -1472,9 +1522,8 @@ function App() {
 
       <section className="chat-workspace">
         <header className="chat-topbar">
-          <div>
-            <p className="eyebrow">Akon Memory</p>
-            <h1>{activeConversationTitle}</h1>
+          <div className="chat-title">
+            <h1 title={activeConversationTitle}>Akon</h1>
           </div>
 
           <div className="topbar-actions">
@@ -1507,6 +1556,7 @@ function App() {
             <div className="workspace-metrics" aria-label="Workspace metrics">
               <span>{conversations.length} chats</span>
               <span>{activeMemoryCount} memories</span>
+              <span>{studySessionCount} study sessions</span>
               <span>{auditLogs.length} activities</span>
             </div>
 
@@ -1553,6 +1603,34 @@ function App() {
                   Ask Akon to remember something, explain a topic, translate an idea, prepare an answer, or help you recall useful context.
                 </p>
 
+                <section className="study-session-dashboard" aria-label="Study session mode">
+                  <div className="study-session-header">
+                    <span>Study Session UI</span>
+                    <strong>Explain → Recall → Quiz → Save</strong>
+                  </div>
+
+                  <div className="study-step-row">
+                    {STUDY_SESSION_STEPS.map((step, stepIndex) => (
+                      <span key={step}>
+                        {stepIndex + 1}. {step}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="study-action-row">
+                    {STUDY_SESSION_PROMPTS.slice(0, 3).map((item) => (
+                      <button
+                        className="study-action-button"
+                        key={item.label}
+                        type="button"
+                        onClick={() => handleStudySessionPrompt(item.prompt)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
                 <div className="prompt-grid">
                   {QUICK_START_PROMPTS.map((prompt) => (
                     <button
@@ -1595,7 +1673,7 @@ function App() {
                     message.role === "assistant" && Boolean(message.id);
 
                   return (
-                    <article className={`message ${message.role}`} key={messageKey}>
+                    <article className={`message ${message.role}${isStudyRetentionMessage(message.content) ? " study-session-message" : ""}`} key={messageKey}>
                       <div className="message-heading">
                         <strong>{message.role === "user" ? "You" : "Akon"}</strong>
 
@@ -1794,6 +1872,39 @@ function App() {
       </section>
 
       <aside className="context-panel">
+        <section className="context-card study-context-card">
+          <div className="card-header">
+            <p className="eyebrow">Study session</p>
+            <h2>Retention loop</h2>
+            <p>
+              Turn any lesson into an active study flow: understand it, compress it,
+              recall it, quiz it, then save the key point with approval.
+            </p>
+          </div>
+
+          <div className="study-step-list">
+            {STUDY_SESSION_STEPS.map((step, stepIndex) => (
+              <div className="study-step-item" key={step}>
+                <span>{stepIndex + 1}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
+          </div>
+
+          <div className="study-panel-actions">
+            {STUDY_SESSION_PROMPTS.map((item) => (
+              <button
+                className="ghost-button compact-button"
+                key={item.label}
+                type="button"
+                onClick={() => handleStudySessionPrompt(item.prompt)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section className="context-card">
           <div className="card-header">
             <p className="eyebrow">Memory</p>
@@ -1918,12 +2029,12 @@ function App() {
                         >
                           <option value="preference">Preference</option>
                           <option value="goal">Goal</option>
-                <option value="study_note">Study note</option>
-                <option value="fact">Fact</option>
-                <option value="person">Person</option>
-                <option value="project">Project</option>
-                <option value="decision">Decision</option>
-                <option value="language">Language</option>
+                          <option value="study_note">Study note</option>
+                          <option value="fact">Fact</option>
+                          <option value="person">Person</option>
+                          <option value="project">Project</option>
+                          <option value="decision">Decision</option>
+                          <option value="language">Language</option>
                           <option value="constraint">Constraint</option>
                           <option value="emotional_baseline">Emotional baseline</option>
                           <option value="cultural_context">Cultural context</option>

@@ -10,6 +10,11 @@ type ContentBlock =
       lines: string[];
     }
   | {
+      type: "heading";
+      level: number;
+      text: string;
+    }
+  | {
       type: "code";
       language: string | null;
       lines: string[];
@@ -31,6 +36,21 @@ function getCodeFenceLanguage(line: string): string | null {
   const language = line.trim().replace(/^```/, "").trim();
 
   return language || null;
+}
+
+function isHeadingLine(line: string): boolean {
+  return /^#{1,6}\s+\S/.test(line.trim());
+}
+
+function getHeadingBlock(line: string): ContentBlock {
+  const trimmed = line.trim();
+  const marker = trimmed.match(/^#{1,6}/)?.[0] || "#";
+
+  return {
+    type: "heading",
+    level: Math.min(marker.length, 3),
+    text: trimmed.replace(/^#{1,6}\s+/, ""),
+  };
 }
 
 function isBulletLine(line: string): boolean {
@@ -86,6 +106,12 @@ function parseContent(content: string): ContentBlock[] {
       continue;
     }
 
+    if (isHeadingLine(currentLine)) {
+      blocks.push(getHeadingBlock(currentLine));
+      index += 1;
+      continue;
+    }
+
     if (isBulletLine(currentLine)) {
       const items: string[] = [];
 
@@ -124,6 +150,7 @@ function parseContent(content: string): ContentBlock[] {
       index < lines.length &&
       lines[index].trim() &&
       !isCodeFence(lines[index]) &&
+      !isHeadingLine(lines[index]) &&
       !isBulletLine(lines[index]) &&
       !isNumberedLine(lines[index])
     ) {
@@ -140,15 +167,40 @@ function parseContent(content: string): ContentBlock[] {
   return blocks;
 }
 
+function cleanPlainMarkdown(text: string): string {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/\*/g, "");
+}
+
 function renderInlineText(text: string) {
-  const parts = text.split(/(`[^`]+`)/g);
+  const parts = text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_)/g)
+    .filter(Boolean);
 
   return parts.map((part, index) => {
+    const key = `${part}-${index}`;
+
     if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
-      return <code key={`${part}-${index}`}>{part.slice(1, -1)}</code>;
+      return <code key={key}>{part.slice(1, -1)}</code>;
     }
 
-    return <span key={`${part}-${index}`}>{part}</span>;
+    if (
+      (part.startsWith("**") && part.endsWith("**")) ||
+      (part.startsWith("__") && part.endsWith("__"))
+    ) {
+      return <strong key={key}>{part.slice(2, -2)}</strong>;
+    }
+
+    if (
+      (part.startsWith("*") && part.endsWith("*")) ||
+      (part.startsWith("_") && part.endsWith("_"))
+    ) {
+      return <em key={key}>{part.slice(1, -1)}</em>;
+    }
+
+    return <span key={key}>{cleanPlainMarkdown(part)}</span>;
   });
 }
 
@@ -193,10 +245,22 @@ function MessageContent({ content }: MessageContentProps) {
                   {copiedCodeIndex === index ? "✓" : "⧉"}
                 </button>
               </span>
+
               <pre>
                 <code>{code}</code>
               </pre>
             </div>
+          );
+        }
+
+        if (block.type === "heading") {
+          return (
+            <h3
+              className={`message-content-heading level-${block.level}`}
+              key={`heading-${index}`}
+            >
+              {renderInlineText(block.text)}
+            </h3>
           );
         }
 

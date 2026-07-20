@@ -139,7 +139,7 @@ Akon is:
 
 ## Current milestone
 
-v0.5.4 introduces Study Retention Mode on top of memory recall workflows.
+v0.5.5 introduces Study Session UI on top of Study Retention Mode.
 
 The goal is not to build wearable hardware yet. The goal is to align the product identity,
 system behavior, frontend language, and documentation with the long-term memory companion
@@ -168,3 +168,15 @@ Added direction:
 - Akon should help users actively recall information instead of only reading explanations.
 - Akon should suggest study-note memories only after the user approves saving.
 - This prepares Akon for stronger student workflows and future voice-based recall practice.
+
+## v0.5.5 Study Session UI
+
+This milestone makes Study Retention Mode visible in the product interface.
+
+Added direction:
+
+- The empty chat state now presents study-session controls.
+- The right context panel now includes a retention loop card.
+- Study-mode replies receive visual treatment so users can recognize learning sessions quickly.
+- The workspace now surfaces study-session activity as part of the top metrics.
+- This prepares Akon for a richer learning workspace with session tracking, progress, quizzes, and saved study notes.
