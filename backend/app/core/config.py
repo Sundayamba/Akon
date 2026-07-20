@@ -15,7 +15,7 @@ DEFAULT_DEV_SECRET = "change-this-dev-secret-before-production"
 class Settings(BaseSettings):
     app_name: str = "Akon"
     app_env: AppEnvironment = "development"
-    api_version: str = "0.5.0"
+    api_version: str = "0.5.1"
 
     secret_key: str = DEFAULT_DEV_SECRET
     jwt_algorithm: str = "HS256"
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
         "http://localhost:5173,"
         "http://127.0.0.1:5173"
     )
-    trusted_hosts: str = "localhost,127.0.0.1,testserver"
+    trusted_hosts: str = "localhost,127.0.0.1,testserver,*.onrender.com"
     expose_docs: bool = True
 
     model_config = SettingsConfigDict(
@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     @property
     def cors_allowed_origins_list(self) -> list[str]:
         origins = [
-            origin.strip()
+            origin.strip().rstrip("/")
             for origin in self.cors_allowed_origins.split(",")
             if origin.strip()
         ]
@@ -240,6 +240,11 @@ class Settings(BaseSettings):
             if not self.public_frontend_url:
                 raise ValueError(
                     "PUBLIC_FRONTEND_URL is required in production."
+                )
+
+            if not self.public_frontend_url.startswith(("https://", "http://")):
+                raise ValueError(
+                    "PUBLIC_FRONTEND_URL must start with http:// or https://."
                 )
 
         return self
