@@ -70,12 +70,12 @@ type MemoryEditState = {
 const ACTIVE_CONVERSATION_KEY = "akon_active_conversation_id";
 
 const QUICK_START_PROMPTS = [
-  "Help me think through an important decision.",
-  "Teach me something step by step.",
-  "Draft a professional message for me.",
-  "Help me plan my next move.",
-  "Analyze this idea and tell me if it is strong.",
-  "Help me organize my thoughts clearly.",
+  "Help me remember and organize something important.",
+  "Teach me something and help me retain it.",
+  "Translate or simplify something I heard.",
+  "Help me prepare a smart answer in real time.",
+  "Recall useful context from my saved memory.",
+  "Help me turn this idea into a clear next step.",
 ];
 
 const CONTINUE_RESPONSE_PROMPT =
@@ -1211,7 +1211,7 @@ function App() {
               <div className="brand-mark">A</div>
               <div>
                 <strong>Akon</strong>
-                <span>AI Companion Platform</span>
+                <span>AI Memory Companion</span>
               </div>
             </div>
 
@@ -1226,11 +1226,10 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.4.9</p>
-              <h1>Your intelligent companion for thought, work, learning, and life.</h1>
+              <p className="eyebrow">Akon AI - v0.5.2</p>
+              <h1>Your real-time AI memory companion.</h1>
               <p className="hero-copy">
-                Akon helps you think clearly, write better, learn faster, plan next
-                steps, reflect with care, and keep useful context under your control.
+                Akon helps you remember what matters, understand faster, translate ideas, prepare answers, and keep useful context under your control.
               </p>
 
               <div className="hero-pills">
@@ -1243,12 +1242,12 @@ function App() {
 
             <form className="auth-card" onSubmit={handleAuthSubmit}>
               <div className="card-header centered">
-                <p className="eyebrow">Your AI workspace</p>
+                <p className="eyebrow">Your memory workspace</p>
                 <h2>
                   {authMode === "login" ? "Welcome back" : "Create your Akon account"}
                 </h2>
                 <p>
-                  Continue your conversations, saved context, and personal AI workspace.
+                  Continue your conversations, saved memory, and personal intelligence workspace.
                 </p>
               </div>
 
@@ -1325,7 +1324,7 @@ function App() {
             <div className="brand-mark">A</div>
             <div>
               <strong>Akon</strong>
-              <span>AI Workspace</span>
+              <span>Memory Workspace</span>
             </div>
           </div>
 
@@ -1474,7 +1473,7 @@ function App() {
       <section className="chat-workspace">
         <header className="chat-topbar">
           <div>
-            <p className="eyebrow">Akon AI</p>
+            <p className="eyebrow">Akon Memory</p>
             <h1>{activeConversationTitle}</h1>
           </div>
 
@@ -1549,10 +1548,9 @@ function App() {
             ) : messages.length === 0 ? (
               <div className="empty-conversation pro-empty-state">
                 <div className="brand-mark large-brand-mark">A</div>
-                <h2>How can Akon help?</h2>
+                <h2>What should Akon help you remember or understand?</h2>
                 <p>
-                  Ask a question, draft something, study a topic, think through a
-                  decision, or organize your next move.
+                  Ask Akon to remember something, explain a topic, translate an idea, prepare an answer, or help you recall useful context.
                 </p>
 
                 <div className="prompt-grid">
@@ -1799,10 +1797,9 @@ function App() {
         <section className="context-card">
           <div className="card-header">
             <p className="eyebrow">Memory</p>
-            <h2>Personal context</h2>
+            <h2>Memory core</h2>
             <p>
-              Add preferences, goals, constraints, or background details so Akon becomes
-              more useful over time.
+              Add approved context, study notes, goals, people, preferences, or useful details so Akon can help you recall them later.
             </p>
           </div>
 
@@ -1822,10 +1819,10 @@ function App() {
             </label>
 
             <label>
-              What should Akon remember?
+              What should Akon help you remember?
               <textarea
                 value={memoryContent}
-                placeholder="Example: I prefer direct, step-by-step guidance when learning something difficult."
+                placeholder="Example: I want Akon to help me remember what I study and explain it back clearly."
                 onChange={(event) => setMemoryContent(event.target.value)}
               />
             </label>
