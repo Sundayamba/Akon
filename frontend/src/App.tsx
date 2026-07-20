@@ -71,7 +71,7 @@ const ACTIVE_CONVERSATION_KEY = "akon_active_conversation_id";
 
 const QUICK_START_PROMPTS = [
   "Help me remember and organize something important.",
-  "Teach me something and help me retain it.",
+  "Start Study Retention Mode for a topic I give you.",
   "Translate or simplify something I heard.",
   "Help me prepare a smart answer in real time.",
   "Recall useful context from my saved memory.",
@@ -1226,7 +1226,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.5.2</p>
+              <p className="eyebrow">Akon AI - v0.5.4</p>
               <h1>Your real-time AI memory companion.</h1>
               <p className="hero-copy">
                 Akon helps you remember what matters, understand faster, translate ideas, prepare answers, and keep useful context under your control.

@@ -2,11 +2,16 @@ from typing import Any, Literal
 
 from app.core.config import settings
 from app.services.llm_provider import LLMProviderError, get_llm_provider
+from app.services.study_retention_service import (
+    build_study_retention_reply,
+    is_study_retention_request,
+)
 from app.services.support_strategy_service import build_grounding_line, build_support_reply
 
 
 ResponsePosture = Literal[
     "general",
+    "study_retention",
     "learning",
     "research",
     "planning",
@@ -263,6 +268,7 @@ def _is_short_casual_message(message: str) -> bool:
 def _has_task_signal(message: str) -> bool:
     return any(
         (
+            is_study_retention_request(message),
             _contains_any(message, LEARNING_SIGNALS),
             _contains_any(message, RESEARCH_SIGNALS),
             _contains_any(message, PLANNING_SIGNALS),
@@ -313,6 +319,9 @@ def _detect_response_posture(
 
     if _contains_any(message, WRITING_SIGNALS):
         return "writing"
+
+    if is_study_retention_request(message):
+        return "study_retention"
 
     if _contains_any(message, LEARNING_SIGNALS):
         return "learning"
@@ -431,6 +440,9 @@ def _adaptive_fallback_reply(
 
     if response_posture == "writing":
         return _writing_fallback_reply(message)
+
+    if response_posture == "study_retention":
+        return build_study_retention_reply(message)
 
     if response_posture == "learning":
         return _learning_fallback_reply()

@@ -43,3 +43,22 @@ def test_engine_safety_behavior_takes_priority_for_crisis() -> None:
 
     assert "Your safety matters" in reply
     assert "Akon senses" not in reply
+
+
+def test_engine_uses_study_retention_mode_for_revision_prompt() -> None:
+    reply = generate_akon_reply(
+        message="Teach me DNS so I won't forget it and quiz me.",
+        safety_result={
+            "level": "S0",
+            "reason": "No immediate safety concern detected.",
+            "detected_emotion": None,
+        },
+    )
+
+    assert "Study Retention Mode" in reply
+    assert "Understand it" in reply
+    assert "Compress it" in reply
+    assert "Recall it" in reply
+    assert "Quiz it" in reply
+    assert "Save the key point" in reply
+    assert "DNS" in reply

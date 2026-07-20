@@ -5,6 +5,10 @@ from openai import OpenAI
 
 from app.core.config import settings
 from app.core.system_prompt import AKON_SYSTEM_PROMPT
+from app.services.study_retention_service import (
+    build_study_retention_reply,
+    is_study_retention_request,
+)
 from app.services.support_strategy_service import build_support_reply
 
 
@@ -14,6 +18,7 @@ class LLMProviderError(RuntimeError):
 
 ResponsePosture = Literal[
     "general",
+    "study_retention",
     "learning",
     "research",
     "planning",
@@ -29,6 +34,11 @@ POSTURE_INSTRUCTIONS: dict[ResponsePosture, str] = {
     "general": (
         "Answer the user's request directly. Be clear, useful, and practical. "
         "Do not assume distress. Avoid filler."
+    ),
+    "study_retention": (
+        "Use Study Retention Mode. Teach the topic in layers, compress it into a short memory version, "
+        "ask the user to recall it in their own words, include a short quiz, and suggest what could be saved "
+        "as a study-note memory after user approval."
     ),
     "learning": (
         "Teach clearly. Start from the user's level, explain the concept, show why it matters, "
@@ -76,6 +86,9 @@ def _fallback_posture_from_message(message: str) -> ResponsePosture:
     so direct provider calls and tests still behave reasonably.
     """
     normalized = _normalize_message(message)
+
+    if is_study_retention_request(message):
+        return "study_retention"
 
     if any(
         signal in normalized
@@ -292,6 +305,9 @@ def _build_mock_reply(
     if response_posture == "writing":
         return _build_writing_mock_reply(message)
 
+    if response_posture == "study_retention":
+        return build_study_retention_reply(message)
+
     if response_posture == "learning":
         return (
             "Let's learn it step by step.\n\n"
@@ -351,6 +367,7 @@ def _build_provider_input(
         "- If the user asks for writing, produce the finished draft.\n"
         "- If the user asks for technical help, give exact commands, file names, or code where useful.\n"
         "- If the user asks for learning, teach clearly and check understanding when appropriate.\n"
+        "- If the user asks to study, revise, retain, remember, practice, or be quizzed, use Study Retention Mode.\n"
         "- If the user asks for a decision, compare and recommend when possible.\n"
         "- If current verification is required, say so plainly without pretending to browse.\n"
         "- Use saved memory only if it directly improves this answer.\n"

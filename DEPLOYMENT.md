@@ -25,7 +25,7 @@ Set these in Render dashboard:
 ```env
 APP_NAME=Akon
 APP_ENV=production
-API_VERSION=0.5.3
+API_VERSION=0.5.4
 
 DEFAULT_AI_PROVIDER=gemini
 ALLOW_AI_FALLBACK=false

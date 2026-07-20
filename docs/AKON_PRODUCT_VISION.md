@@ -139,7 +139,7 @@ Akon is:
 
 ## Current milestone
 
-v0.5.3 introduces memory recall workflows on top of the human memory companion foundation.
+v0.5.4 introduces Study Retention Mode on top of memory recall workflows.
 
 The goal is not to build wearable hardware yet. The goal is to align the product identity,
 system behavior, frontend language, and documentation with the long-term memory companion
@@ -156,3 +156,15 @@ Added direction:
 - Study notes, people, projects, decisions, facts, and language context are now treated as stronger memory categories.
 - High-sensitivity memory should not be broadly surfaced unless the user's recall query overlaps that memory.
 - Recall responses should be honest when saved memory is not enough.
+
+## v0.5.4 Study Retention Mode
+
+This milestone makes Akon more useful for learners.
+
+Added direction:
+
+- Akon can detect study, revision, practice, quiz, and retention requests.
+- Akon can respond with a structured learning loop: understand, compress, recall, quiz, and save.
+- Akon should help users actively recall information instead of only reading explanations.
+- Akon should suggest study-note memories only after the user approves saving.
+- This prepares Akon for stronger student workflows and future voice-based recall practice.
