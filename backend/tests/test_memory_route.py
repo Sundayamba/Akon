@@ -352,3 +352,132 @@ def test_user_cannot_access_another_users_memory() -> None:
     )
 
     assert unauthorized_response.status_code == 404
+
+def test_memory_health_reports_review_queue() -> None:
+    headers = auth_headers(
+        client,
+        email="memory-health@example.com",
+        display_name="Memory Health",
+    )
+
+    duplicate_payload = {
+        "memory_type": "goal",
+        "content": "User wants to build a production-ready AI memory companion.",
+        "source": "manual",
+        "confidence": "high",
+        "sensitivity": "low",
+        "consent_state": "explicit",
+    }
+
+    first_response = client.post(
+        "/memory",
+        headers=headers,
+        json=duplicate_payload,
+    )
+    second_response = client.post(
+        "/memory",
+        headers=headers,
+        json=duplicate_payload,
+    )
+    review_response = client.post(
+        "/memory",
+        headers=headers,
+        json={
+            "memory_type": "constraint",
+            "content": "User has a limited weekly development schedule.",
+            "source": "manual",
+            "confidence": "low",
+            "sensitivity": "high",
+            "consent_state": "implicit",
+        },
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    assert review_response.status_code == 201
+
+    health_response = client.get(
+        "/memory/health",
+        headers=headers,
+    )
+
+    assert health_response.status_code == 200
+
+    data = health_response.json()
+
+    assert data["total_count"] == 3
+    assert data["active_count"] == 3
+    assert data["implicit_count"] == 1
+    assert data["high_sensitivity_count"] == 1
+    assert data["low_confidence_count"] == 1
+    assert data["duplicate_group_count"] == 1
+    assert data["review_recommended_count"] == 3
+
+
+def test_preview_recall_is_explainable_and_excludes_revoked_memory() -> None:
+    headers = auth_headers(
+        client,
+        email="recall-preview@example.com",
+        display_name="Recall Preview",
+    )
+
+    active_response = client.post(
+        "/memory",
+        headers=headers,
+        json={
+            "memory_type": "project",
+            "content": "The user's cybersecurity platform is named Rex Sentinel.",
+            "source": "manual",
+            "confidence": "high",
+            "sensitivity": "low",
+            "consent_state": "explicit",
+        },
+    )
+    revoked_response = client.post(
+        "/memory",
+        headers=headers,
+        json={
+            "memory_type": "project",
+            "content": "The user's old project codename was Black Shield.",
+            "source": "manual",
+            "confidence": "high",
+            "sensitivity": "low",
+            "consent_state": "explicit",
+        },
+    )
+
+    assert active_response.status_code == 201
+    assert revoked_response.status_code == 201
+
+    revoked_memory_id = revoked_response.json()["id"]
+
+    revoke_response = client.post(
+        f"/memory/{revoked_memory_id}/revoke",
+        headers=headers,
+    )
+
+    assert revoke_response.status_code == 200
+
+    preview_response = client.post(
+        "/memory/preview-recall",
+        headers=headers,
+        json={
+            "query": "What do you remember about my Rex Sentinel project?",
+            "limit": 5,
+        },
+    )
+
+    assert preview_response.status_code == 200
+
+    data = preview_response.json()
+
+    assert data["is_recall_request"] is True
+    assert data["matched_count"] >= 1
+    assert data["matches"][0]["id"] == active_response.json()["id"]
+    assert data["matches"][0]["relevance_score"] > 0
+    assert data["matches"][0]["reasons"]
+    assert all(
+        match["id"] != revoked_memory_id
+        for match in data["matches"]
+    )
+    assert "Revoked memories are excluded" in data["privacy_note"]

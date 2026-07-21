@@ -8,7 +8,9 @@ import type {
   ConversationReflectionResponse,
   ConversationSummary,
   MemoryCandidateItem,
+  MemoryHealth,
   MemoryItem,
+  MemoryRecallPreview,
   MessageFeedbackResponse,
   TokenResponse,
 } from "../types";
@@ -339,6 +341,30 @@ export async function listMemories(token: string): Promise<MemoryItem[]> {
     token,
   });
 }
+
+export async function getMemoryHealth(
+  token: string,
+): Promise<MemoryHealth> {
+  return apiRequest<MemoryHealth>("/memory/health", {
+    token,
+  });
+}
+
+export async function previewMemoryRecall(
+  token: string,
+  query: string,
+  limit = 5,
+): Promise<MemoryRecallPreview> {
+  return apiRequest<MemoryRecallPreview>("/memory/preview-recall", {
+    method: "POST",
+    token,
+    body: {
+      query,
+      limit,
+    },
+  });
+}
+
 
 export async function createMemory(
   token: string,

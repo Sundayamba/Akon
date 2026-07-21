@@ -99,6 +99,56 @@ class MemoryUpdateRequest(BaseModel):
     )
 
 
+class MemoryRecallPreviewRequest(BaseModel):
+    query: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        description="A user-authored query used to preview Akon's memory retrieval.",
+    )
+    limit: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Maximum number of memory matches to return.",
+    )
+
+
+class MemoryRecallMatchResponse(BaseModel):
+    id: str
+    memory_type: str
+    content: str
+    source: str | None = None
+    confidence: str
+    sensitivity: str
+    consent_state: str
+    relevance_score: int = Field(ge=0)
+    reasons: list[str] = Field(default_factory=list)
+
+
+class MemoryRecallPreviewResponse(BaseModel):
+    query: str
+    is_recall_request: bool
+    matched_count: int = Field(ge=0)
+    matches: list[MemoryRecallMatchResponse] = Field(default_factory=list)
+    privacy_note: str
+
+
+class MemoryHealthResponse(BaseModel):
+    total_count: int = Field(ge=0)
+    active_count: int = Field(ge=0)
+    explicit_count: int = Field(ge=0)
+    implicit_count: int = Field(ge=0)
+    revoked_count: int = Field(ge=0)
+    high_sensitivity_count: int = Field(ge=0)
+    low_confidence_count: int = Field(ge=0)
+    review_recommended_count: int = Field(ge=0)
+    duplicate_group_count: int = Field(ge=0)
+    memory_type_counts: dict[str, int] = Field(default_factory=dict)
+    review_recommended_memory_ids: list[str] = Field(default_factory=list)
+    duplicate_groups: list[list[str]] = Field(default_factory=list)
+
+
 class MemoryItemResponse(BaseModel):
     id: str
     memory_type: str

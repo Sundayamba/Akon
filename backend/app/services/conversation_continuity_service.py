@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.models.conversation import Conversation, Message
@@ -57,6 +57,10 @@ def build_conversation_summaries(
                 partition_by=Message.conversation_id,
                 order_by=[
                     Message.created_at.desc(),
+                    case(
+                        (Message.role == "assistant", 1),
+                        else_=0,
+                    ).desc(),
                     Message.id.desc(),
                 ],
             )

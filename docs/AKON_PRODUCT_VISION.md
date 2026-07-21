@@ -211,3 +211,26 @@ rather than a temporary sidebar view.
 - Cancelled and failed optimistic messages do not remain as false chat history.
 - Switching conversations cancels incompatible in-progress generation.
 - Production requires persistent PostgreSQL storage.
+
+## v0.6.0 Explainable Memory Intelligence and Control
+
+This milestone turns Akon's memory retrieval from hidden prompt plumbing into a
+transparent, consent-aware product capability.
+
+- Users can preview which active memories match a query before involving the AI.
+- Every selected memory includes a relevance score and human-readable reasons.
+- Revoked memory is excluded from retrieval.
+- High-sensitivity memory requires direct topic overlap before it can be recalled.
+- Memory Health surfaces implicit consent, low confidence, sensitive records,
+  duplicates, and memories recommended for review.
+- Audit logs record memory IDs and counts without recording private memory content.
+
+### Stage 2 — Live provenance and Memory Control Center
+
+- Chat responses return the exact consent-active memories selected for a reply.
+- Every live memory disclosure includes relevance, sensitivity, consent, and
+  human-readable retrieval reasons.
+- The Memory Control Center provides health metrics, a review queue, duplicate
+  visibility, and recall previews.
+- High-sensitivity matches are clearly marked in both preview and live-chat UX.
+- Memory-use audit events store IDs and counts rather than private memory text.

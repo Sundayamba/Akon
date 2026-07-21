@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.memory import MemoryRecallMatchResponse
+
 
 FeedbackRating = Literal["helpful", "not_helpful"]
 
@@ -79,6 +81,13 @@ class ChatMessageResponse(BaseModel):
     memory_candidates: list[MemoryCandidateItem] = Field(
         default_factory=list,
         description="Possible memories detected from the message. These are not saved until user confirms.",
+    )
+    used_memories: list[MemoryRecallMatchResponse] = Field(
+        default_factory=list,
+        description=(
+            "Consent-active memories selected for this reply, including relevance "
+            "scores and human-readable retrieval reasons."
+        ),
     )
 
 

@@ -18,6 +18,7 @@ from app.schemas.chat import (
     ConversationUpdateRequest,
     GroundingToolItem,
     MemoryCandidateItem,
+    MemoryRecallMatchResponse,
     MessageFeedbackRequest,
     MessageFeedbackResponse,
     MessageItem,
@@ -28,7 +29,11 @@ from app.services.auth_service import get_current_user
 from app.services.conversation_continuity_service import build_conversation_summaries
 from app.services.llm_provider import LLMProviderError
 from app.services.memory_extraction_service import extract_memory_candidates
-from app.services.memory_service import retrieve_memory_context
+from app.services.memory_service import (
+    MemoryRecallMatch,
+    build_memory_context,
+    retrieve_memory_matches,
+)
 from app.services.reflection_service import build_conversation_reflection
 
 from app.services.study_note_candidate_service import build_study_note_candidate
@@ -212,6 +217,24 @@ def _create_conversation_title(message: str) -> str:
     return f"{title[:57]}..."
 
 
+def _to_memory_recall_response(
+    match: MemoryRecallMatch,
+) -> MemoryRecallMatchResponse:
+    memory = match.memory
+
+    return MemoryRecallMatchResponse(
+        id=memory.id,
+        memory_type=memory.memory_type,
+        content=memory.content,
+        source=memory.source,
+        confidence=memory.confidence,
+        sensitivity=memory.sensitivity,
+        consent_state=memory.consent_state,
+        relevance_score=match.relevance_score,
+        reasons=list(match.reasons),
+    )
+
+
 def _audit_risk_from_safety_level(safety_level: str | None) -> str:
     if safety_level == "S4":
         return "critical"
@@ -377,13 +400,18 @@ def _build_ai_context(
     user_id: str,
     message: str,
     existing_messages: list[Message] | None = None,
-) -> str | None:
+) -> tuple[str | None, list[MemoryRecallMatchResponse]]:
     context_blocks = []
 
-    memory_context = retrieve_memory_context(
+    memory_matches = retrieve_memory_matches(
         db=db,
         user_id=user_id,
         message=message,
+    )
+
+    memory_context = build_memory_context(
+        message=message,
+        matches=memory_matches,
     )
 
     if memory_context:
@@ -400,10 +428,15 @@ def _build_ai_context(
             f"{recent_context}"
         )
 
-    if not context_blocks:
-        return None
+    used_memories = [
+        _to_memory_recall_response(match)
+        for match in memory_matches
+    ]
 
-    return "\n\n".join(context_blocks)
+    if not context_blocks:
+        return None, used_memories
+
+    return "\n\n".join(context_blocks), used_memories
 
 
 def _raise_ai_unavailable_error() -> None:
@@ -486,7 +519,7 @@ def send_chat_message(
     safety_level = safety_result["level"]
     detected_emotion = safety_result.get("detected_emotion")
 
-    ai_context = _build_ai_context(
+    ai_context, used_memories = _build_ai_context(
         db=db,
         user_id=current_user.id,
         message=payload.message,
@@ -567,6 +600,12 @@ def send_chat_message(
             "grounding_tool": grounding_tool.name if grounding_tool else None,
             "memory_candidate_count": len(memory_candidates),
             "used_ai_context": bool(ai_context),
+            "used_memory_count": len(used_memories),
+            "used_memory_ids": [memory.id for memory in used_memories],
+            "high_sensitivity_memory_count": sum(
+                memory.sensitivity == "high"
+                for memory in used_memories
+            ),
             "recent_context_message_count": len(existing_messages[-8:]),
             "user_message_id": user_message.id,
             "assistant_message_id": assistant_message.id,
@@ -587,6 +626,7 @@ def send_chat_message(
         user_message_id=user_message.id,
         assistant_message_id=assistant_message.id,
         memory_candidates=memory_candidates,
+        used_memories=used_memories,
     )
 
 
@@ -645,7 +685,7 @@ def regenerate_assistant_message(
     safety_level = safety_result["level"]
     detected_emotion = safety_result.get("detected_emotion")
 
-    ai_context = _build_ai_context(
+    ai_context, used_memories = _build_ai_context(
         db=db,
         user_id=current_user.id,
         message=previous_user_message.content,
@@ -695,6 +735,12 @@ def regenerate_assistant_message(
             "previous_user_message_id": previous_user_message.id,
             "new_assistant_message_id": assistant_message.id,
             "used_ai_context": bool(ai_context),
+            "used_memory_count": len(used_memories),
+            "used_memory_ids": [memory.id for memory in used_memories],
+            "high_sensitivity_memory_count": sum(
+                memory.sensitivity == "high"
+                for memory in used_memories
+            ),
             "safety_level": safety_level,
             "detected_emotion": detected_emotion,
         },
@@ -712,6 +758,7 @@ def regenerate_assistant_message(
         conversation_id=conversation.id,
         assistant_message_id=assistant_message.id,
         memory_candidates=[],
+        used_memories=used_memories,
     )
 
 

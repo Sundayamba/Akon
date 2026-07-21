@@ -939,3 +939,307 @@
     font-weight: 700;
   }
 }
+
+/* v0.6.0 explainable memory intelligence */
+
+.memory-control-center {
+  display: grid;
+  gap: 0.8rem;
+  border-color: rgba(79, 70, 229, 0.18);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(79, 70, 229, 0.1), transparent 12rem),
+    rgba(255, 255, 255, 0.9);
+}
+
+.memory-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.memory-health-grid > div {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 12px;
+  background: rgba(248, 250, 252, 0.86);
+  padding: 0.58rem 0.42rem;
+  text-align: center;
+}
+
+.memory-health-grid strong {
+  color: #312e81;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.memory-health-grid span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.memory-health-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  color: #64748b;
+  font-size: 0.67rem;
+}
+
+.memory-health-note > span {
+  color: #4338ca;
+  font-weight: 850;
+}
+
+.pulse-status {
+  animation: memory-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes memory-status-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.memory-control-subheader {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.memory-control-subheader strong {
+  color: #1e293b;
+  font-size: 0.78rem;
+}
+
+.memory-control-subheader span {
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 0.64rem;
+  font-weight: 850;
+  padding: 0.22rem 0.44rem;
+}
+
+.memory-review-queue,
+.memory-preview-results {
+  display: grid;
+  gap: 0.48rem;
+}
+
+.memory-review-item {
+  display: grid;
+  width: 100%;
+  gap: 0.2rem;
+  border: 1px solid rgba(245, 158, 11, 0.18);
+  border-radius: 12px;
+  background: rgba(255, 251, 235, 0.78);
+  color: #334155;
+  padding: 0.55rem 0.62rem;
+  text-align: left;
+  box-shadow: none;
+}
+
+.memory-review-item:hover {
+  border-color: rgba(245, 158, 11, 0.32);
+  background: rgba(255, 247, 214, 0.92);
+  box-shadow: none;
+}
+
+.memory-review-item > span {
+  color: #92400e;
+  font-size: 0.64rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.memory-review-item p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #334155;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.memory-review-item small,
+.memory-review-overflow {
+  color: #78716c;
+  font-size: 0.62rem;
+}
+
+.memory-preview-form {
+  display: grid;
+  gap: 0.48rem;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
+  padding-top: 0.72rem;
+}
+
+.memory-preview-form label {
+  display: grid;
+  gap: 0.35rem;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.memory-preview-form textarea {
+  min-height: 4.4rem;
+  resize: vertical;
+}
+
+.memory-preview-form button {
+  min-height: 2.35rem;
+}
+
+.memory-match-card {
+  display: grid;
+  gap: 0.38rem;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+  border-radius: 13px;
+  background: rgba(248, 250, 255, 0.9);
+  padding: 0.62rem;
+}
+
+.memory-match-card.sensitive,
+.used-memory-item.sensitive {
+  border-color: rgba(190, 24, 93, 0.2);
+  background: rgba(253, 242, 248, 0.82);
+}
+
+.memory-match-header,
+.used-memory-item > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.memory-match-header strong,
+.used-memory-item strong {
+  color: #312e81;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.memory-match-header span,
+.used-memory-item > div span {
+  color: #6366f1;
+  font-size: 0.64rem;
+  font-weight: 850;
+}
+
+.memory-match-card p,
+.used-memory-item p {
+  margin: 0;
+  color: #334155;
+  font-size: 0.73rem;
+  line-height: 1.42;
+}
+
+.memory-match-card ul,
+.used-memory-item ul {
+  display: grid;
+  gap: 0.18rem;
+  margin: 0;
+  padding-left: 1rem;
+  color: #64748b;
+  font-size: 0.66rem;
+  line-height: 1.38;
+}
+
+.memory-match-card small,
+.used-memory-item small {
+  color: #64748b;
+  font-size: 0.62rem;
+}
+
+.memory-privacy-note {
+  margin: 0;
+  border-radius: 10px;
+  background: rgba(236, 253, 245, 0.82);
+  color: #047857;
+  font-size: 0.64rem;
+  line-height: 1.4;
+  padding: 0.5rem 0.58rem;
+}
+
+.used-memory-disclosure {
+  margin-top: 0.18rem;
+  border: 1px solid rgba(79, 70, 229, 0.12);
+  border-radius: 12px;
+  background: rgba(238, 242, 255, 0.58);
+  color: #334155;
+}
+
+.used-memory-disclosure summary {
+  display: flex;
+  gap: 0.42rem;
+  align-items: center;
+  cursor: pointer;
+  color: #4338ca;
+  font-size: 0.68rem;
+  font-weight: 850;
+  list-style: none;
+  padding: 0.5rem 0.62rem;
+}
+
+.used-memory-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.used-memory-disclosure[open] summary {
+  border-bottom: 1px solid rgba(79, 70, 229, 0.1);
+}
+
+.used-memory-list {
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.5rem;
+}
+
+.used-memory-item {
+  display: grid;
+  gap: 0.32rem;
+  border: 1px solid rgba(79, 70, 229, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.5rem 0.56rem;
+}
+
+.memory-review-focus {
+  outline: 3px solid rgba(245, 158, 11, 0.3);
+  outline-offset: 3px;
+  transition: outline-color 240ms ease;
+}
+
+@media (max-width: 1180px) {
+  .memory-control-center {
+    gap: 0.62rem;
+  }
+
+  .memory-health-grid > div {
+    padding: 0.5rem 0.32rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .memory-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

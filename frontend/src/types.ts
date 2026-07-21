@@ -35,6 +35,41 @@ export type MemoryItem = {
   updated_at: string;
 };
 
+export type MemoryRecallMatch = {
+  id: string;
+  memory_type: string;
+  content: string;
+  source: string | null;
+  confidence: string;
+  sensitivity: string;
+  consent_state: string;
+  relevance_score: number;
+  reasons: string[];
+};
+
+export type MemoryRecallPreview = {
+  query: string;
+  is_recall_request: boolean;
+  matched_count: number;
+  matches: MemoryRecallMatch[];
+  privacy_note: string;
+};
+
+export type MemoryHealth = {
+  total_count: number;
+  active_count: number;
+  explicit_count: number;
+  implicit_count: number;
+  revoked_count: number;
+  high_sensitivity_count: number;
+  low_confidence_count: number;
+  review_recommended_count: number;
+  duplicate_group_count: number;
+  memory_type_counts: Record<string, number>;
+  review_recommended_memory_ids: string[];
+  duplicate_groups: string[][];
+};
+
 export type MemoryCandidateItem = {
   memory_type: string;
   content: string;
@@ -61,6 +96,7 @@ export type ChatResponse = {
   user_message_id: string | null;
   assistant_message_id: string;
   memory_candidates: MemoryCandidateItem[];
+  used_memories: MemoryRecallMatch[];
 };
 
 export type MessageFeedbackResponse = {

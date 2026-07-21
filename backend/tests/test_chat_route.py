@@ -443,3 +443,58 @@ def test_failed_ai_request_does_not_create_phantom_conversation(
     }
 
     assert after_ids == before_ids
+
+def test_chat_response_reports_used_memories(
+    monkeypatch,
+) -> None:
+    headers = auth_headers(
+        client,
+        email="used-memory@example.com",
+        display_name="Used Memory",
+    )
+
+    memory_response = client.post(
+        "/memory",
+        headers=headers,
+        json={
+            "memory_type": "goal",
+            "content": "User wants to become a cybersecurity product builder.",
+            "source": "manual",
+            "confidence": "high",
+            "sensitivity": "low",
+            "consent_state": "explicit",
+        },
+    )
+
+    assert memory_response.status_code == 201
+    captured_contexts: list[str | None] = []
+
+    def fake_generate_reply(
+        message: str,
+        safety_result: dict,
+        memory_context: str | None = None,
+    ) -> str:
+        captured_contexts.append(memory_context)
+        return "You want to become a cybersecurity product builder."
+
+    monkeypatch.setattr(
+        "app.api.routes.chat.generate_akon_reply",
+        fake_generate_reply,
+    )
+
+    response = client.post(
+        "/chat/message",
+        headers=headers,
+        json={
+            "message": "What do you remember about my cybersecurity goal?",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert captured_contexts[-1] is not None
+    assert "cybersecurity product builder" in captured_contexts[-1]
+    assert len(data["used_memories"]) == 1
+    assert data["used_memories"][0]["id"] == memory_response.json()["id"]
+    assert data["used_memories"][0]["relevance_score"] > 0
+    assert data["used_memories"][0]["reasons"]

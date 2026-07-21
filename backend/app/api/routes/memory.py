@@ -8,11 +8,21 @@ from app.models.user import User
 from app.schemas.memory import (
     MemoryCandidateConfirmRequest,
     MemoryCreateRequest,
+    MemoryHealthResponse,
     MemoryItemResponse,
+    MemoryRecallMatchResponse,
+    MemoryRecallPreviewRequest,
+    MemoryRecallPreviewResponse,
     MemoryUpdateRequest,
 )
 from app.services.audit_service import create_audit_log
 from app.services.auth_service import get_current_user
+from app.services.memory_service import (
+    MemoryRecallMatch,
+    build_memory_health,
+    is_recall_request,
+    retrieve_memory_matches,
+)
 
 router = APIRouter()
 
@@ -28,6 +38,24 @@ def _to_memory_response(memory: MemoryItem) -> MemoryItemResponse:
         consent_state=memory.consent_state,
         created_at=memory.created_at,
         updated_at=memory.updated_at,
+    )
+
+
+def _to_recall_match_response(
+    match: MemoryRecallMatch,
+) -> MemoryRecallMatchResponse:
+    memory = match.memory
+
+    return MemoryRecallMatchResponse(
+        id=memory.id,
+        memory_type=memory.memory_type,
+        content=memory.content,
+        source=memory.source,
+        confidence=memory.confidence,
+        sensitivity=memory.sensitivity,
+        consent_state=memory.consent_state,
+        relevance_score=match.relevance_score,
+        reasons=list(match.reasons),
     )
 
 
@@ -171,6 +199,89 @@ def confirm_memory_candidate(
     db.refresh(memory)
 
     return _to_memory_response(memory)
+
+
+@router.get("/health", response_model=MemoryHealthResponse)
+def get_memory_health(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MemoryHealthResponse:
+    memories = list(
+        db.scalars(
+            select(MemoryItem)
+            .where(MemoryItem.user_id == current_user.id)
+            .order_by(MemoryItem.updated_at.desc())
+        ).all()
+    )
+
+    return MemoryHealthResponse(
+        **build_memory_health(memories)
+    )
+
+
+@router.post(
+    "/preview-recall",
+    response_model=MemoryRecallPreviewResponse,
+)
+def preview_memory_recall(
+    payload: MemoryRecallPreviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MemoryRecallPreviewResponse:
+    matches = retrieve_memory_matches(
+        db=db,
+        user_id=current_user.id,
+        message=payload.query,
+        limit=payload.limit,
+    )
+
+    match_responses = [
+        _to_recall_match_response(match)
+        for match in matches
+    ]
+
+    high_sensitivity_match_count = sum(
+        match.memory.sensitivity == "high"
+        for match in matches
+    )
+
+    create_audit_log(
+        db,
+        action="memory.recall.previewed",
+        entity_type="memory",
+        entity_id=None,
+        actor_user_id=current_user.id,
+        risk_level=(
+            "high"
+            if high_sensitivity_match_count
+            else "low"
+        ),
+        source="memory_route",
+        details={
+            "query_length": len(payload.query),
+            "requested_limit": payload.limit,
+            "match_count": len(matches),
+            "memory_ids": [
+                match.memory.id
+                for match in matches
+            ],
+            "high_sensitivity_match_count": high_sensitivity_match_count,
+        },
+    )
+
+    db.commit()
+
+    return MemoryRecallPreviewResponse(
+        query=payload.query,
+        is_recall_request=is_recall_request(payload.query),
+        matched_count=len(match_responses),
+        matches=match_responses,
+        privacy_note=(
+            "This preview is computed only from your active memories. "
+            "Revoked memories are excluded, and high-sensitivity memories "
+            "require a direct topic match."
+        ),
+    )
 
 
 @router.get("/{memory_id}", response_model=MemoryItemResponse)

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import ChatComposer from "./components/ChatComposer";
 import MessageContent from "./components/MessageContent";
+import MemoryControlCenter from "./components/MemoryControlCenter";
+import UsedMemoryDisclosure from "./components/UsedMemoryDisclosure";
 import "./App.css";
 import "./components/WorkspacePolish.css";
 import {
@@ -43,6 +45,7 @@ import type {
   GroundingToolItem,
   MemoryCandidateItem,
   MemoryItem,
+  MemoryRecallMatch,
 } from "./types";
 
 type AuthMode = "login" | "register";
@@ -57,6 +60,7 @@ type ChatMessage = {
   groundingTool?: GroundingToolItem | null;
   feedbackRating?: FeedbackRating | null;
   deliveryState?: "sending" | "sent";
+  usedMemories?: MemoryRecallMatch[];
 };
 
 type MemoryEditState = {
@@ -1082,6 +1086,7 @@ function App() {
           detectedEmotion: response.detected_emotion,
           groundingTool: response.grounding_tool,
           feedbackRating: null,
+          usedMemories: response.used_memories,
         },
       ]);
 
@@ -1202,6 +1207,7 @@ function App() {
           detectedEmotion: response.detected_emotion,
           groundingTool: response.grounding_tool,
           feedbackRating: null,
+          usedMemories: response.used_memories,
         },
       ]);
 
@@ -1552,7 +1558,7 @@ function App() {
 
           <div className="public-grid">
             <section className="public-copy">
-              <p className="eyebrow">Akon AI - v0.5.7</p>
+              <p className="eyebrow">Akon AI - v0.6.0</p>
               <h1>Your real-time AI memory companion.</h1>
               <p className="hero-copy">
                 Akon helps you remember what matters, understand faster, translate ideas, prepare answers, and keep useful context under your control.
@@ -2067,6 +2073,12 @@ function App() {
 
                       <MessageContent content={message.content} />
 
+                      {message.role === "assistant" && (
+                        <UsedMemoryDisclosure
+                          memories={message.usedMemories || []}
+                        />
+                      )}
+
                       <div className="message-meta">
                         <time dateTime={message.createdAt}>
                           {formatMessageTimestamp(message.createdAt)}
@@ -2223,6 +2235,14 @@ function App() {
               Back to chat
             </button>
           </div>
+        <MemoryControlCenter
+          token={token}
+          memories={memories}
+          onError={setErrorMessage}
+          onStatus={setStatusMessage}
+          onRefresh={() => refreshWorkspace(token)}
+        />
+
         <section className="context-card study-context-card">
           <div className="card-header">
             <p className="eyebrow">Study session</p>
@@ -2506,7 +2526,11 @@ function App() {
                 }
 
                 return (
-                  <div className="mini-item memory-item-card" key={memory.id}>
+                  <div
+                    className="mini-item memory-item-card"
+                    id={`memory-card-${memory.id}`}
+                    key={memory.id}
+                  >
                     <div className="memory-item-header">
                       <strong>{memory.memory_type}</strong>
                       <span className={`memory-consent ${memory.consent_state}`}>
